@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Turn figma2json (0.4+) output into an agent-friendly cache.
+"""Turn figma2json output into an agent-friendly cache.
 
     python3 build_figma_cache.py canvas.json OUT_DIR --kind design-system
     python3 build_figma_cache.py canvas.json OUT_DIR --kind screens --page UI
@@ -905,7 +905,7 @@ if __name__ == "__main__":
         if parent in PROP_NAMES:
             PROP_NAMES[def_id] = PROP_NAMES[parent]
     if "variables" not in doc:
-        sys.exit("This canvas.json has no `variables`: convert with figma2json 0.4+ (without --legacy).")
+        sys.exit("This canvas.json has no `variables`: convert with figma2json without --legacy.")
     res = (build_design_system(doc, a.out, names) if a.kind == "design-system"
            else build_screens(doc, a.out, a.page, names))
     res["overrides"] = dict(override_stats)
