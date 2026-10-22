@@ -7,6 +7,16 @@ pub enum FileType {
     FigJam,
 }
 
+impl FileType {
+    /// The name used for this file type in the JSON output (`"figma"` or `"figjam"`).
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            FileType::Figma => "figma",
+            FileType::FigJam => "figjam",
+        }
+    }
+}
+
 /// Parsed .fig file structure with version and chunks
 #[derive(Debug, Clone)]
 pub struct ParsedFile {
