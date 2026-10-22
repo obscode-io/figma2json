@@ -141,7 +141,7 @@ pub use frame_properties_removal::remove_frame_properties;
 pub use geometry_removal::{remove_geometry_fields, remove_geometry_only};
 pub use guid_path_removal::remove_guid_paths;
 pub use guid_removal::remove_guid_fields;
-pub use image_hash::transform_image_hashes;
+pub use image_hash::{image_extension, transform_image_hashes, transform_image_hashes_with};
 pub use image_metadata_removal::remove_image_metadata_fields;
 pub use internal_only_nodes_removal::remove_internal_only_nodes;
 pub use invisible_paints_removal::remove_invisible_paints;

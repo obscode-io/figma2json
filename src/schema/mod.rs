@@ -11,8 +11,9 @@ pub use decoder::decode_fig_to_json;
 pub use tree::build_tree;
 
 pub use transformations::{
-    add_design_context, simplify_enums, simplify_text_properties, transform_colors_to_css,
-    transform_image_hashes, transform_matrix_to_css, DesignDefinitions,
+    add_design_context, image_extension, simplify_enums, simplify_text_properties,
+    transform_colors_to_css, transform_image_hashes, transform_image_hashes_with,
+    transform_matrix_to_css, DesignDefinitions,
 };
 
 pub use transformations::{

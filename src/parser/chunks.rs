@@ -98,6 +98,43 @@ pub fn extract_zip_to_directory(bytes: &[u8], target_dir: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Read every file of a ZIP archive into memory
+///
+/// The in-memory counterpart of [`extract_zip_to_directory`]: returns each
+/// file entry as `(path, contents)` in archive order, with `/`-separated paths
+/// as stored in the archive. Directory entries and entries whose path would
+/// escape the archive root (absolute paths, `..`) are skipped.
+///
+/// # Errors
+/// * `Err(FigError::Zip)` / `Err(FigError::Io)` - If the archive cannot be read
+///
+/// # Examples
+/// ```no_run
+/// use figma2json::parser::extract_zip_to_memory;
+///
+/// let zip_bytes = std::fs::read("example.fig").unwrap();
+/// for (path, contents) in extract_zip_to_memory(&zip_bytes).unwrap() {
+///     println!("{path}: {} bytes", contents.len());
+/// }
+/// ```
+pub fn extract_zip_to_memory(bytes: &[u8]) -> Result<Vec<(String, Vec<u8>)>> {
+    let mut archive = ZipArchive::new(Cursor::new(bytes))?;
+    let mut entries = Vec::with_capacity(archive.len());
+
+    for i in 0..archive.len() {
+        let mut file = archive.by_index(i)?;
+        if file.is_dir() || file.enclosed_name().is_none() {
+            continue;
+        }
+        let path = file.name().to_owned();
+        let mut contents = Vec::with_capacity(usize::try_from(file.size()).unwrap_or(0));
+        file.read_to_end(&mut contents)?;
+        entries.push((path, contents));
+    }
+
+    Ok(entries)
+}
+
 /// Extract chunks from a .fig file (version format)
 ///
 /// Parses the versioned `fig-kiwi` container format:
@@ -322,6 +359,44 @@ mod tests {
         assert!(matches!(
             extract_from_zip(&zip),
             Err(FigError::CanvasNotFoundInZip)
+        ));
+    }
+
+    #[test]
+    fn test_extract_zip_to_memory() {
+        let mut writer = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        writer
+            .add_directory("images/", zip::write::FileOptions::default())
+            .unwrap();
+        let zip = {
+            use std::io::Write;
+            for (name, contents) in [
+                ("canvas.fig", &b"fig-kiwi"[..]),
+                ("images/a", b"img"),
+                ("../escaped", b"no"),
+                ("/absolute", b"no"),
+                ("meta.json", b"{}"),
+            ] {
+                writer
+                    .start_file(name, zip::write::FileOptions::default())
+                    .unwrap();
+                writer.write_all(contents).unwrap();
+            }
+            writer.finish().unwrap().into_inner()
+        };
+
+        let entries = extract_zip_to_memory(&zip).unwrap();
+        assert_eq!(
+            entries,
+            vec![
+                ("canvas.fig".to_owned(), b"fig-kiwi".to_vec()),
+                ("images/a".to_owned(), b"img".to_vec()),
+                ("meta.json".to_owned(), b"{}".to_vec()),
+            ]
+        );
+        assert!(matches!(
+            extract_zip_to_memory(b"PK not a zip"),
+            Err(FigError::Zip(_))
         ));
     }
 

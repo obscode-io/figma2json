@@ -1,5 +1,7 @@
 use crate::error::{FigError, Result};
 use flate2::read::DeflateDecoder;
+use ruzstd::decoding::errors::{FrameDecoderError, ReadFrameHeaderError};
+use ruzstd::decoding::StreamingDecoder;
 use std::io::{self, Read};
 
 /// PNG magic signature (first two bytes: 137, 80)
@@ -68,7 +70,7 @@ pub fn decompress_chunk(bytes: &[u8]) -> Result<Vec<u8>> {
     }
 
     decompress_deflate(bytes)
-        .or_else(|_| zstd::decode_all(bytes))
+        .or_else(|_| decompress_zstd(bytes))
         .map_err(|e| {
             FigError::Decompression(format!(
                 "Failed to decompress chunk (tried both DEFLATE and Zstandard): {e}"
@@ -81,6 +83,39 @@ fn decompress_deflate(bytes: &[u8]) -> io::Result<Vec<u8>> {
     let mut decompressed = Vec::new();
     DeflateDecoder::new(bytes).read_to_end(&mut decompressed)?;
     Ok(decompressed)
+}
+
+fn decompress_zstd(mut bytes: &[u8]) -> io::Result<Vec<u8>> {
+    let mut decompressed = Vec::new();
+    while !bytes.is_empty() {
+        match StreamingDecoder::new(&mut bytes) {
+            Ok(mut decoder) => {
+                decoder.read_to_end(&mut decompressed)?;
+            }
+            Err(FrameDecoderError::ReadFrameHeaderError(ReadFrameHeaderError::SkipFrame {
+                length,
+                ..
+            })) => {
+                bytes = usize::try_from(length)
+                    .ok()
+                    .and_then(|length| bytes.get(length..))
+                    .ok_or_else(|| invalid_zstd("Skippable frame is truncated"))?;
+            }
+            Err(FrameDecoderError::ReadFrameHeaderError(
+                ReadFrameHeaderError::MagicNumberReadError(_)
+                | ReadFrameHeaderError::BadMagicNumber(_),
+            )) => return Err(invalid_zstd("Unknown frame descriptor")),
+            Err(FrameDecoderError::ReadFrameHeaderError(error)) => {
+                return Err(invalid_zstd(&error.to_string()))
+            }
+            Err(error) => return Err(io::Error::other(error)),
+        }
+    }
+    Ok(decompressed)
+}
+
+fn invalid_zstd(message: &str) -> io::Error {
+    io::Error::new(io::ErrorKind::InvalidData, message)
 }
 
 #[cfg(test)]
@@ -155,5 +190,81 @@ mod tests {
         let invalid_data = vec![1, 2, 3, 4, 5];
         let result = decompress_chunk(&invalid_data);
         assert!(result.is_err());
+    }
+
+    fn zstd_with_checksum(data: &[u8], level: i32) -> Vec<u8> {
+        let mut encoder = zstd::stream::Encoder::new(Vec::new(), level).unwrap();
+        encoder.include_checksum(true).unwrap();
+        encoder.write_all(data).unwrap();
+        encoder.finish().unwrap()
+    }
+
+    fn sample_data(len: usize) -> Vec<u8> {
+        let mut state = 0x2545_f491_u32;
+        (0..len)
+            .map(|i| {
+                state ^= state << 13;
+                state ^= state >> 17;
+                state ^= state << 5;
+                if i % 7 == 0 {
+                    (state % 251) as u8
+                } else {
+                    b"fig-kiwi nodeChanges"[i % 20]
+                }
+            })
+            .collect()
+    }
+
+    #[test]
+    fn test_decompress_zstd_matches_reference_decoder() {
+        for len in [0, 1, 1000, 300_000, 2_500_000] {
+            let original = sample_data(len);
+            for level in [1, 3, 19] {
+                let compressed = zstd::encode_all(&original[..], level).unwrap();
+                assert_eq!(decompress_zstd(&compressed).unwrap(), original);
+                let compressed = zstd_with_checksum(&original, level);
+                assert_eq!(decompress_zstd(&compressed).unwrap(), original);
+            }
+        }
+    }
+
+    #[test]
+    fn test_decompress_zstd_concatenated_frames() {
+        let mut compressed = zstd::encode_all(&b"first frame, "[..], 3).unwrap();
+        compressed.extend(zstd::encode_all(&b"second frame"[..], 3).unwrap());
+        assert_eq!(
+            decompress_chunk(&compressed).unwrap(),
+            zstd::decode_all(&compressed[..]).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_decompress_zstd_skips_skippable_frames() {
+        let mut compressed = 0x184D_2A50_u32.to_le_bytes().to_vec();
+        compressed.extend(3u32.to_le_bytes());
+        compressed.extend(b"abc");
+        compressed.extend(zstd::encode_all(&b"payload"[..], 3).unwrap());
+        assert_eq!(zstd::decode_all(&compressed[..]).unwrap(), b"payload");
+        assert_eq!(decompress_zstd(&compressed).unwrap(), b"payload");
+
+        compressed.truncate(10);
+        assert!(decompress_zstd(&compressed).is_err());
+    }
+
+    #[test]
+    fn test_decompress_error_names_both_formats() {
+        let error = decompress_chunk(b"ab").unwrap_err().to_string();
+        assert!(
+            error.ends_with(
+                "Failed to decompress chunk (tried both DEFLATE and Zstandard): Unknown frame descriptor"
+            ),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn test_decompress_truncated_zstd_fails() {
+        let compressed = zstd::encode_all(&sample_data(10_000)[..], 3).unwrap();
+        assert!(decompress_chunk(&compressed[..compressed.len() / 2]).is_err());
     }
 }

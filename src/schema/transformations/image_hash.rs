@@ -39,46 +39,83 @@ use std::path::Path;
 /// // tree now has "image": {"filename": "images/6049a17a.jpg", "name": "Amazon-beast"}
 /// ```
 pub fn transform_image_hashes(tree: &mut JsonValue, base_dir: &Path) -> Result<()> {
-    transform_recursive(tree, base_dir);
+    transform_image_hashes_with(tree, |filename| {
+        let file_path = base_dir.join(filename);
+        let extension = detect_image_format(&file_path)?;
+        let _ = fs::rename(&file_path, base_dir.join(format!("{filename}{extension}")));
+        Some(extension)
+    })
+}
+
+/// Transform image hash arrays to filename strings, asking `extension_of` for
+/// each image's extension
+///
+/// Works like [`transform_image_hashes`] without touching the filesystem:
+/// `extension_of` receives the extension-less filename of every image
+/// reference (`images/<hex hash>`), in document order, and returns the
+/// extension to append (such as `".png"`), or `None` to leave it bare. Use
+/// [`image_extension`] to detect the extension from the image bytes, for
+/// example when the images are held in memory.
+///
+/// # Examples
+/// ```
+/// use figma2json::schema::{image_extension, transform_image_hashes_with};
+/// use serde_json::json;
+/// use std::collections::HashMap;
+///
+/// let images = HashMap::from([("images/6049a17a", b"\x89PNG\r\n\x1a\n".to_vec())]);
+/// let mut tree = json!({"image": {"hash": [96, 73, 161, 122], "name": "Logo"}});
+/// transform_image_hashes_with(&mut tree, |filename| {
+///     images.get(filename).and_then(|bytes| image_extension(bytes))
+/// })
+/// .unwrap();
+/// assert_eq!(tree, json!({"image": {"filename": "images/6049a17a.png", "name": "Logo"}}));
+/// ```
+pub fn transform_image_hashes_with<F>(tree: &mut JsonValue, mut extension_of: F) -> Result<()>
+where
+    F: FnMut(&str) -> Option<&'static str>,
+{
+    transform_recursive(tree, &mut extension_of);
     Ok(())
 }
 
 /// Keys whose object values are image references.
 const IMAGE_FIELDS: &[&str] = &["image", "imageThumbnail"];
 
+const HEADER_LEN: usize = 256;
+
+type ExtensionOf<'a> = dyn FnMut(&str) -> Option<&'static str> + 'a;
+
 /// Walk the tree, rewriting image references in key order.
 ///
 /// Each image field is rewritten just before its own subtree is visited, so
-/// files are renamed in document order (which decides which occurrence of a
-/// hash sees the not-yet-renamed file).
-fn transform_recursive(value: &mut JsonValue, base_dir: &Path) {
+/// extensions are requested in document order.
+fn transform_recursive(value: &mut JsonValue, extension_of: &mut ExtensionOf<'_>) {
     match value {
         JsonValue::Object(map) => {
             for (key, child) in map.iter_mut() {
                 if IMAGE_FIELDS.contains(&key.as_str()) {
                     if let JsonValue::Object(image) = child {
-                        transform_image(image, base_dir);
+                        transform_image(image, extension_of);
                     }
                 }
-                transform_recursive(child, base_dir);
+                transform_recursive(child, extension_of);
             }
         }
         JsonValue::Array(items) => {
             for item in items {
-                transform_recursive(item, base_dir);
+                transform_recursive(item, extension_of);
             }
         }
         _ => {}
     }
 }
 
-/// Replace an image object's `hash` array with a `filename`, renaming the
-/// file on disk to carry the detected extension.
+/// Replace an image object's `hash` array with a `filename` carrying the
+/// extension `extension_of` returns.
 ///
 /// Objects whose `hash` is missing or not a valid byte array are left as-is.
-/// A failed rename is ignored: the file may already have been renamed (or not
-/// exist yet); the JSON still gets the extension.
-fn transform_image(image: &mut Map<String, JsonValue>, base_dir: &Path) {
+fn transform_image(image: &mut Map<String, JsonValue>, extension_of: &mut ExtensionOf<'_>) {
     let Some(mut filename) = image
         .get("hash")
         .and_then(JsonValue::as_array)
@@ -87,10 +124,8 @@ fn transform_image(image: &mut Map<String, JsonValue>, base_dir: &Path) {
         return;
     };
 
-    let file_path = base_dir.join(&filename);
-    if let Some(extension) = detect_image_format(&file_path) {
+    if let Some(extension) = extension_of(&filename) {
         filename.push_str(extension);
-        let _ = fs::rename(&file_path, base_dir.join(&filename));
     }
 
     image.remove("hash");
@@ -117,19 +152,39 @@ fn hash_to_filename(hash: &[JsonValue]) -> Option<String> {
 
 /// Detect image format from file header (magic bytes)
 ///
-/// Reads the first 256 bytes of a file to identify the image format.
+/// Reads the first 256 bytes of a file and passes them to [`image_extension`].
 ///
 /// # Returns
 /// * `Some(&str)` - The file extension (".png", ".jpg", ".webp", ".gif" or ".svg")
 /// * `None` - If format cannot be detected or file cannot be read
 fn detect_image_format(file_path: &Path) -> Option<&'static str> {
+    let mut buffer = [0u8; HEADER_LEN];
+    let bytes_read = fs::File::open(file_path).ok()?.read(&mut buffer).ok()?;
+    image_extension(&buffer[..bytes_read])
+}
+
+/// Detect an image's format from its leading bytes (magic numbers)
+///
+/// Only the first 256 bytes are looked at.
+///
+/// # Returns
+/// * `Some(&str)` - The file extension (".png", ".jpg", ".webp", ".gif" or ".svg")
+/// * `None` - If the format is not recognized
+///
+/// # Examples
+/// ```
+/// use figma2json::schema::image_extension;
+///
+/// assert_eq!(image_extension(b"GIF89a\x01\x00"), Some(".gif"));
+/// assert_eq!(image_extension(b"<svg xmlns='http://www.w3.org/2000/svg'/>"), Some(".svg"));
+/// assert_eq!(image_extension(b"plain text"), None);
+/// ```
+pub fn image_extension(bytes: &[u8]) -> Option<&'static str> {
     const PNG: &[u8] = &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
     const JPEG: &[u8] = &[0xFF, 0xD8, 0xFF];
     const GIF: &[u8] = b"GIF8";
 
-    let mut buffer = [0u8; 256];
-    let bytes_read = fs::File::open(file_path).ok()?.read(&mut buffer).ok()?;
-    let header = &buffer[..bytes_read];
+    let header = &bytes[..bytes.len().min(HEADER_LEN)];
 
     if header.len() < 4 {
         return None;
@@ -670,5 +725,61 @@ mod tests {
         assert!(temp_dir.join("images/a17a.jpg").exists());
 
         let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_image_extension_from_bytes() {
+        let mut long_svg = vec![b' '; 300];
+        long_svg.extend_from_slice(b"<svg>");
+        let mut riff_not_webp = b"RIFF\0\0\0\0WAVE".to_vec();
+        riff_not_webp.extend_from_slice(&[0; 8]);
+        let cases: &[(&[u8], Option<&str>)] = &[
+            (
+                &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0],
+                Some(".png"),
+            ),
+            (&[0xFF, 0xD8, 0xFF, 0xE0], Some(".jpg")),
+            (b"GIF87a", Some(".gif")),
+            (b"RIFF\0\0\0\0WEBPVP8 ", Some(".webp")),
+            (b"<?XML version='1.0'?><!DOCTYPE SVG>", Some(".svg")),
+            (b"<SVG>", Some(".svg")),
+            (&long_svg, None),
+            (&riff_not_webp, None),
+            (b"GIF", None),
+            (&[0xFF, 0xD8], None),
+            (b"", None),
+        ];
+        for (bytes, expected) in cases {
+            assert_eq!(image_extension(bytes), *expected, "{bytes:?}");
+        }
+    }
+
+    #[test]
+    fn test_transform_with_callback_sees_every_reference_in_order() {
+        let mut tree = json!({
+            "children": [
+                {"image": {"hash": [1, 2], "name": "A"}},
+                {"imageThumbnail": {"hash": [3], "name": "B"}, "image": {"hash": [1, 2]}},
+                {"image": {"name": "no hash"}},
+            ]
+        });
+        let mut seen = Vec::new();
+        transform_image_hashes_with(&mut tree, |filename| {
+            seen.push(filename.to_owned());
+            (filename == "images/0102").then_some(".png")
+        })
+        .unwrap();
+
+        assert_eq!(seen, ["images/0102", "images/0102", "images/03"]);
+        assert_eq!(
+            tree,
+            json!({
+                "children": [
+                    {"image": {"filename": "images/0102.png", "name": "A"}},
+                    {"imageThumbnail": {"filename": "images/03", "name": "B"}, "image": {"filename": "images/0102.png"}},
+                    {"image": {"name": "no hash"}},
+                ]
+            })
+        );
     }
 }

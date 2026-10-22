@@ -36,5 +36,8 @@ pub mod types;
 mod pipeline;
 
 pub use error::{FigError, Result};
-pub use pipeline::{convert, convert_raw, convert_with_options, ConvertOptions};
+pub use pipeline::{
+    convert, convert_in_memory, convert_raw, convert_with_options, ConvertOptions,
+    InMemoryConversion, OutputFile,
+};
 pub use types::{FileType, ParsedFile};
