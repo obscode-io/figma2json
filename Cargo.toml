@@ -47,6 +47,9 @@ unsafe_code = "forbid"
 [lints.clippy]
 all = { level = "deny", priority = -1 }
 
+[workspace]
+members = ["web"]
+
 [profile.release]
 lto = true
 codegen-units = 1
