@@ -30,3 +30,4 @@ big
 TODO.md
 __pycache__/
 .claude/worktrees/
+web/www/pkg/
