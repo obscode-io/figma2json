@@ -1,8 +1,9 @@
 use anyhow::{anyhow, bail, Context, Result};
 use clap::Parser;
+use figma2json::ConvertOptions;
 use std::fs;
-use std::io::Write;
-use std::path::PathBuf;
+use std::io::{self, BufWriter, Write};
+use std::path::{Path, PathBuf};
 
 #[derive(Parser)]
 #[command(name = "figma2json")]
@@ -49,6 +50,85 @@ struct Cli {
     keep_internal: bool,
 }
 
+impl Cli {
+    fn convert_options(&self) -> ConvertOptions {
+        ConvertOptions {
+            legacy: self.legacy,
+            keep_internal: self.keep_internal,
+        }
+    }
+}
+
+/// Where the transformed JSON of one conversion is written.
+#[derive(Clone, Copy)]
+enum Output<'a> {
+    Stdout,
+    File(&'a Path),
+}
+
+/// What is being converted, which decides how progress and errors are reported.
+#[derive(Clone, Copy)]
+enum Source<'a> {
+    /// The input file given on the command line (a bare canvas.fig).
+    Input,
+    /// A .fig found in the directory a ZIP archive was extracted to.
+    ArchiveEntry { fig_path: &'a Path, root: &'a Path },
+}
+
+impl Source<'_> {
+    fn conversion_failed(self, raw: bool) -> String {
+        match (self, raw) {
+            (Source::Input, false) => "Failed to convert .fig file to JSON".to_owned(),
+            (Source::Input, true) => "Failed to convert .fig file to raw JSON".to_owned(),
+            (Source::ArchiveEntry { fig_path, .. }, false) => {
+                format!("Failed to convert: {}", fig_path.display())
+            }
+            (Source::ArchiveEntry { fig_path, .. }, true) => {
+                format!("Failed to convert to raw JSON: {}", fig_path.display())
+            }
+        }
+    }
+
+    /// Verbose note printed before converting (`raw`: the untransformed output).
+    fn log_converting(self, raw: bool) {
+        match (self, raw) {
+            (Source::Input, false) => eprintln!("Converting to JSON..."),
+            (Source::Input, true) => eprintln!("Converting to raw JSON..."),
+            (Source::ArchiveEntry { fig_path, root }, false) => {
+                eprintln!("Converting: {}", relative_to(fig_path, root).display());
+            }
+            (Source::ArchiveEntry { .. }, true) => {}
+        }
+    }
+
+    /// Verbose note printed once the JSON is in memory, before it is written.
+    fn log_writing(self, output: Output<'_>, raw: bool) {
+        match (self, output) {
+            (Source::Input, Output::File(path)) if raw => {
+                eprintln!("Writing raw output to: {}", path.display());
+            }
+            (Source::Input, Output::File(path)) => {
+                eprintln!("Conversion successful!");
+                eprintln!("Writing output to: {}", path.display());
+            }
+            (Source::Input, Output::Stdout) => eprintln!("Conversion successful!"),
+            (Source::ArchiveEntry { .. }, _) => {}
+        }
+    }
+
+    /// Verbose note printed after the JSON was written.
+    fn log_written(self, output: Output<'_>, raw: bool) {
+        match (self, output) {
+            (Source::Input, Output::File(_)) if raw => eprintln!("Raw JSON done!"),
+            (Source::Input, Output::File(_)) => eprintln!("Done!"),
+            (Source::ArchiveEntry { root, .. }, Output::File(path)) => {
+                eprintln!("  → {}", relative_to(path, root).display());
+            }
+            (_, Output::Stdout) => {}
+        }
+    }
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
@@ -56,7 +136,6 @@ fn main() -> Result<()> {
         eprintln!("Reading input file: {}", cli.input.display());
     }
 
-    // Read input file
     let bytes = fs::read(&cli.input)
         .with_context(|| format!("Failed to read input file: {}", cli.input.display()))?;
 
@@ -64,258 +143,174 @@ fn main() -> Result<()> {
         eprintln!("File size: {} bytes", bytes.len());
     }
 
-    // Check if input is a ZIP container
-    let is_zip = figma2json::parser::is_zip_container(&bytes);
-
-    // Validate arguments based on file type
-    if is_zip {
-        // ZIP mode: require extract_dir, forbid -o
-        let extract_dir = cli.extract_dir.as_ref()
-            .ok_or_else(|| {
-                anyhow!(
-                    "{} is a ZIP archive (as saved by Figma). Give an output directory: figma2json {} <output-dir>",
-                    cli.input.display(),
-                    cli.input.display()
-                )
-            })?;
+    if figma2json::parser::is_zip_container(&bytes) {
+        // ZIP mode: an output directory is required and -o is not allowed
+        let extract_dir = cli.extract_dir.as_deref().ok_or_else(|| {
+            anyhow!(
+                "{} is a ZIP archive (as saved by Figma). Give an output directory: figma2json {} <output-dir>",
+                cli.input.display(),
+                cli.input.display()
+            )
+        })?;
 
         if cli.output.is_some() {
             bail!("-o/--output can't be used with a ZIP archive: the JSON is written to <output-dir>/canvas.json");
         }
 
-        // ZIP extraction mode
-        handle_zip_mode(
-            &bytes,
-            extract_dir,
-            cli.compact,
-            cli.verbose,
-            cli.raw,
-            cli.legacy,
-            cli.keep_internal,
-        )?;
+        convert_zip(&cli, &bytes, extract_dir)
     } else {
-        // Regular .fig file mode
-        if cli.verbose {
-            eprintln!("Converting to JSON...");
-        }
-
-        // Determine base directory for image file operations
-        let base_dir = if let Some(output_path) = &cli.output {
-            output_path.parent()
-        } else {
-            // If outputting to stdout, use current directory
-            Some(std::path::Path::new("."))
-        };
-
-        let options = figma2json::ConvertOptions {
-            legacy: cli.legacy,
-            keep_internal: cli.keep_internal,
-        };
-        let json = figma2json::convert_with_options(&bytes, base_dir, &options)
-            .context("Failed to convert .fig file to JSON")?;
-
-        if cli.verbose {
-            eprintln!("Conversion successful!");
-        }
-
-        // Write output (pretty by default, compact if flag is set), streamed so the
-        // whole document is never held twice in memory as a string
-        match cli.output.as_ref() {
-            Some(path) => {
-                if cli.verbose {
-                    eprintln!("Writing output to: {}", path.display());
-                }
-                write_json_file(path, &json, cli.compact)?;
-                if cli.verbose {
-                    eprintln!("Done!");
-                }
-            }
-            None => {
-                let stdout = std::io::stdout();
-                let mut out = std::io::BufWriter::new(stdout.lock());
-                let written = write_json(&mut out, &json, cli.compact)
-                    .and_then(|_| writeln!(out).map_err(anyhow::Error::from))
-                    .and_then(|_| out.flush().map_err(anyhow::Error::from));
-                // The reader closing early (`| head`, `| jq` exiting) is not an error
-                if let Err(e) = written {
-                    if !is_broken_pipe(&e) {
-                        return Err(e);
-                    }
-                }
-            }
-        }
-        drop(json);
-
-        // If --raw flag is set, also generate raw JSON file
-        if cli.raw {
-            if cli.verbose {
-                eprintln!("Converting to raw JSON...");
-            }
-
-            let raw_json = figma2json::convert_raw(&bytes)
-                .context("Failed to convert .fig file to raw JSON")?;
-
-            // Determine raw output path
-            let raw_path = match cli.output.as_ref() {
-                Some(path) => {
-                    // Derive .raw.json from output path
-                    let mut raw = path.clone();
-                    raw.set_extension("raw.json");
-                    raw
-                }
-                None => {
-                    // Derive from input path
-                    cli.input.with_extension("raw.json")
-                }
-            };
-
-            if cli.verbose {
-                eprintln!("Writing raw output to: {}", raw_path.display());
-            }
-
-            write_json_file(&raw_path, &raw_json, cli.compact)?;
-
-            if cli.verbose {
-                eprintln!("Raw JSON done!");
-            }
-        }
+        convert_input(&cli, &bytes)
     }
-
-    Ok(())
 }
 
-/// Handle ZIP extraction mode: extract all files and convert all .fig files found
-fn handle_zip_mode(
-    zip_bytes: &[u8],
-    extract_dir: &PathBuf,
-    compact: bool,
-    verbose: bool,
-    raw: bool,
-    legacy: bool,
-    keep_internal: bool,
-) -> Result<()> {
-    let options = figma2json::ConvertOptions {
-        legacy,
-        keep_internal,
+/// Convert a bare .fig given on the command line, to `-o` or stdout.
+fn convert_input(cli: &Cli, bytes: &[u8]) -> Result<()> {
+    let (output, base_dir) = match cli.output.as_deref() {
+        Some(path) => (Output::File(path), path.parent()),
+        // Writing to stdout: images are looked up in the current directory
+        None => (Output::Stdout, Some(Path::new("."))),
     };
-    if verbose {
+    let raw_output = cli
+        .output
+        .as_deref()
+        .unwrap_or(&cli.input)
+        .with_extension("raw.json");
+
+    convert_one(cli, Source::Input, bytes, base_dir, output, &raw_output)
+}
+
+/// Extract a ZIP archive to `extract_dir` and convert every .fig file it contains
+/// to a .json (and with `--raw`, a .raw.json) next to it.
+fn convert_zip(cli: &Cli, zip_bytes: &[u8], extract_dir: &Path) -> Result<()> {
+    if cli.verbose {
         eprintln!(
             "ZIP file detected - extracting to: {}",
             extract_dir.display()
         );
     }
 
-    // Extract entire ZIP to directory
     figma2json::parser::extract_zip_to_directory(zip_bytes, extract_dir)
         .context("Failed to extract ZIP file")?;
 
-    if verbose {
+    if cli.verbose {
         eprintln!("ZIP extracted successfully");
         eprintln!("Searching for .fig files...");
     }
 
-    // Find all .fig files in extracted contents
     let fig_files = find_fig_files(extract_dir)?;
-
     if fig_files.is_empty() {
         bail!("No .fig files found in ZIP archive");
     }
 
-    let file_count = fig_files.len();
-
-    if verbose {
-        eprintln!("Found {} .fig file(s)", file_count);
+    if cli.verbose {
+        eprintln!("Found {} .fig file(s)", fig_files.len());
     }
 
-    // Convert each .fig file
-    for fig_path in fig_files {
-        let relative_path = fig_path.strip_prefix(extract_dir).unwrap_or(&fig_path);
-
-        if verbose {
-            eprintln!("Converting: {}", relative_path.display());
-        }
-
-        // Read .fig file
-        let fig_bytes = fs::read(&fig_path)
+    for fig_path in &fig_files {
+        let fig_bytes = fs::read(fig_path)
             .with_context(|| format!("Failed to read .fig file: {}", fig_path.display()))?;
+        let source = Source::ArchiveEntry {
+            fig_path,
+            root: extract_dir,
+        };
+        let output = fig_path.with_extension("json");
+        let raw_output = fig_path.with_extension("raw.json");
 
-        // Determine base directory for image file operations (parent of .fig file)
-        let base_dir = fig_path.parent();
-
-        // Convert to JSON
-        let json = figma2json::convert_with_options(&fig_bytes, base_dir, &options)
-            .with_context(|| format!("Failed to convert: {}", fig_path.display()))?;
-
-        // Determine output path: same as .fig but with .json extension
-        let output_path = fig_path.with_extension("json");
-
-        // Write JSON file (pretty by default, compact if flag is set)
-        write_json_file(&output_path, &json, compact)?;
-        drop(json);
-
-        if verbose {
-            eprintln!(
-                "  → {}",
-                output_path
-                    .strip_prefix(extract_dir)
-                    .unwrap_or(&output_path)
-                    .display()
-            );
-        }
-
-        // If --raw flag is set, also generate raw JSON file
-        if raw {
-            let raw_json = figma2json::convert_raw(&fig_bytes).with_context(|| {
-                format!("Failed to convert to raw JSON: {}", fig_path.display())
-            })?;
-
-            // Determine raw output path: same as .fig but with .raw.json extension
-            let raw_output_path = fig_path.with_extension("raw.json");
-
-            // Write raw JSON file
-            write_json_file(&raw_output_path, &raw_json, compact)?;
-
-            if verbose {
-                eprintln!(
-                    "  → {}",
-                    raw_output_path
-                        .strip_prefix(extract_dir)
-                        .unwrap_or(&raw_output_path)
-                        .display()
-                );
-            }
-        }
+        // Images extracted from the archive sit next to the .fig file
+        convert_one(
+            cli,
+            source,
+            &fig_bytes,
+            fig_path.parent(),
+            Output::File(&output),
+            &raw_output,
+        )?;
     }
 
-    if verbose {
-        eprintln!("Done! Converted {} file(s)", file_count);
+    if cli.verbose {
+        eprintln!("Done! Converted {} file(s)", fig_files.len());
     }
 
     Ok(())
 }
 
-/// Recursively find all .fig files in a directory
-fn find_fig_files(dir: &PathBuf) -> Result<Vec<PathBuf>> {
-    let mut fig_files = Vec::new();
+/// Convert one .fig file and write its JSON to `output`; with `--raw`, also write
+/// the untransformed JSON to `raw_output`.
+fn convert_one(
+    cli: &Cli,
+    source: Source<'_>,
+    bytes: &[u8],
+    base_dir: Option<&Path>,
+    output: Output<'_>,
+    raw_output: &Path,
+) -> Result<()> {
+    if cli.verbose {
+        source.log_converting(false);
+    }
+    let json = figma2json::convert_with_options(bytes, base_dir, &cli.convert_options())
+        .with_context(|| source.conversion_failed(false))?;
+    write_output(cli, source, output, &json, false)?;
+    // Free the transformed document before building the raw one
+    drop(json);
 
-    fn visit_dir(dir: &PathBuf, fig_files: &mut Vec<PathBuf>) -> Result<()> {
-        if dir.is_dir() {
-            for entry in fs::read_dir(dir)? {
-                let entry = entry?;
-                let path = entry.path();
+    if cli.raw {
+        if cli.verbose {
+            source.log_converting(true);
+        }
+        let raw_json =
+            figma2json::convert_raw(bytes).with_context(|| source.conversion_failed(true))?;
+        write_output(cli, source, Output::File(raw_output), &raw_json, true)?;
+    }
 
-                if path.is_dir() {
-                    visit_dir(&path, fig_files)?;
-                } else if path.extension().and_then(|s| s.to_str()) == Some("fig") {
-                    fig_files.push(path);
-                }
+    Ok(())
+}
+
+fn write_output(
+    cli: &Cli,
+    source: Source<'_>,
+    output: Output<'_>,
+    json: &serde_json::Value,
+    raw: bool,
+) -> Result<()> {
+    if cli.verbose {
+        source.log_writing(output, raw);
+    }
+    match output {
+        Output::File(path) => write_json_file(path, json, cli.compact)?,
+        Output::Stdout => write_json_stdout(json, cli.compact)?,
+    }
+    if cli.verbose {
+        source.log_written(output, raw);
+    }
+    Ok(())
+}
+
+/// Recursively find all .fig files under `dir`, sorted so they are converted in a
+/// stable order.
+fn find_fig_files(dir: &Path) -> Result<Vec<PathBuf>> {
+    fn visit(dir: &Path, fig_files: &mut Vec<PathBuf>) -> io::Result<()> {
+        for entry in fs::read_dir(dir)? {
+            let path = entry?.path();
+            if path.is_dir() {
+                visit(&path, fig_files)?;
+            } else if path.extension().is_some_and(|ext| ext == "fig") {
+                fig_files.push(path);
             }
         }
         Ok(())
     }
 
-    visit_dir(dir, &mut fig_files)?;
+    let mut fig_files = Vec::new();
+    if dir.is_dir() {
+        visit(dir, &mut fig_files)?;
+    }
+    fig_files.sort();
     Ok(fig_files)
+}
+
+/// `path` relative to `root`, or `path` itself when it is not under `root`.
+fn relative_to<'a>(path: &'a Path, root: &Path) -> &'a Path {
+    path.strip_prefix(root).unwrap_or(path)
 }
 
 /// Serialize JSON to a writer, pretty by default or compact.
@@ -329,29 +324,39 @@ fn write_json<W: Write>(out: &mut W, json: &serde_json::Value, compact: bool) ->
 }
 
 /// Stream JSON to a file through a buffer instead of building one big string first.
-fn write_json_file(path: &std::path::Path, json: &serde_json::Value, compact: bool) -> Result<()> {
-    let file = fs::File::create(path)
-        .with_context(|| format!("Failed to write output file: {}", path.display()))?;
-    let mut out = std::io::BufWriter::new(file);
-    write_json(&mut out, json, compact)
-        .with_context(|| format!("Failed to write output file: {}", path.display()))?;
-    out.flush()
-        .with_context(|| format!("Failed to write output file: {}", path.display()))?;
+fn write_json_file(path: &Path, json: &serde_json::Value, compact: bool) -> Result<()> {
+    let context = || format!("Failed to write output file: {}", path.display());
+    let file = fs::File::create(path).with_context(context)?;
+    let mut out = BufWriter::new(file);
+    write_json(&mut out, json, compact).with_context(context)?;
+    out.flush().with_context(context)?;
     Ok(())
+}
+
+/// Stream JSON to stdout followed by a newline. The reader closing early
+/// (`| head`, `| jq` exiting) is not an error.
+fn write_json_stdout(json: &serde_json::Value, compact: bool) -> Result<()> {
+    let mut out = BufWriter::new(io::stdout().lock());
+    let written = write_json(&mut out, json, compact)
+        .and_then(|()| writeln!(out).map_err(anyhow::Error::from))
+        .and_then(|()| out.flush().map_err(anyhow::Error::from));
+    match written {
+        Err(e) if !is_broken_pipe(&e) => Err(e),
+        _ => Ok(()),
+    }
 }
 
 /// True when an error comes from writing to a closed pipe.
 fn is_broken_pipe(error: &anyhow::Error) -> bool {
     error.chain().any(|cause| {
-        cause
-            .downcast_ref::<std::io::Error>()
-            .map(|e| e.kind() == std::io::ErrorKind::BrokenPipe)
+        let kind = cause
+            .downcast_ref::<io::Error>()
+            .map(io::Error::kind)
             .or_else(|| {
                 cause
                     .downcast_ref::<serde_json::Error>()
-                    .and_then(|e| e.io_error_kind())
-                    .map(|kind| kind == std::io::ErrorKind::BrokenPipe)
-            })
-            .unwrap_or(false)
+                    .and_then(serde_json::Error::io_error_kind)
+            });
+        kind == Some(io::ErrorKind::BrokenPipe)
     })
 }

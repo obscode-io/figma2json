@@ -2,10 +2,14 @@
 name = "figma2json"
 version = "0.4.0"
 edition = "2021"
+# Set by the locked dependency tree (`time`, pulled in by `zip`, needs 1.88);
+# CI builds and tests this version with `--locked`.
+rust-version = "1.88"
 authors = ["kreako <olivier@kreako.fr>", "figma2json contributors"]
 description = "CLI tool to convert Figma .fig files to LLM-friendly JSON format (fork of kreako/fig2json)"
 license = "MIT"
 readme = "README.md"
+repository = "https://github.com/obsidian-code-io/figma2json"
 keywords = ["figma", "converter", "json", "cli", "llm"]
 categories = ["command-line-utilities", "encoding"]
 
@@ -34,5 +38,13 @@ base64 = "0.21"
 # CLI argument parsing
 clap = { version = "4.5", features = ["derive"] }
 
+[lints.rust]
+unsafe_code = "forbid"
+
 [lints.clippy]
-all = "deny"
+all = { level = "deny", priority = -1 }
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

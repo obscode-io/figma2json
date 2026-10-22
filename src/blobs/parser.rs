@@ -14,17 +14,14 @@ use serde_json::Value as JsonValue;
 /// # Returns
 /// * `Ok(Some(JsonValue))` - Successfully parsed blob data
 /// * `Ok(None)` - Unknown blob type or unparseable data
-/// * `Err(FigError)` - If blob extraction fails
+/// * `Err(FigError::InvalidBlob)` - If the blob of a known type has no readable `bytes`
 pub fn parse_blob(blob_type: &str, blob: &JsonValue) -> Result<Option<JsonValue>> {
-    // Extract bytes from blob object
-    let bytes = extract_blob_bytes(blob)?;
-
-    // Parse based on type
-    match blob_type {
-        "commands" => Ok(parse_commands(&bytes)),
-        "vectorNetwork" => Ok(parse_vector_network(&bytes)),
-        _ => Ok(None), // Unknown blob type, return None
-    }
+    let parse: fn(&[u8]) -> Option<JsonValue> = match blob_type {
+        "commands" => parse_commands,
+        "vectorNetwork" => parse_vector_network,
+        _ => return Ok(None), // Unknown blob type
+    };
+    Ok(parse(&extract_blob_bytes(blob)?))
 }
 
 /// Extract bytes from a blob object
@@ -37,25 +34,73 @@ fn extract_blob_bytes(blob: &JsonValue) -> Result<Vec<u8>> {
         .get("bytes")
         .ok_or_else(|| FigError::InvalidBlob("Blob missing bytes field".to_string()))?;
 
-    // Handle base64 string
-    if let Some(base64_str) = bytes_value.as_str() {
-        return general_purpose::STANDARD
+    match bytes_value {
+        JsonValue::String(base64_str) => general_purpose::STANDARD
             .decode(base64_str)
-            .map_err(|e| FigError::InvalidBlob(format!("Failed to decode base64: {}", e)));
+            .map_err(|e| FigError::InvalidBlob(format!("Failed to decode base64: {e}"))),
+        JsonValue::Array(bytes_array) => bytes_from_json(bytes_array),
+        _ => Err(FigError::InvalidBlob(
+            "Blob bytes field is neither string nor array".to_string(),
+        )),
+    }
+}
+
+/// Convert a JSON array of byte values (`0..=255`) to bytes.
+///
+/// A value that is not a byte is an error rather than being silently truncated.
+pub(crate) fn bytes_from_json(values: &[JsonValue]) -> Result<Vec<u8>> {
+    values
+        .iter()
+        .map(|value| {
+            value
+                .as_u64()
+                .and_then(|n| u8::try_from(n).ok())
+                .ok_or_else(|| FigError::InvalidBlob(format!("Blob byte out of range: {value}")))
+        })
+        .collect()
+}
+
+/// Little-endian reader over a byte slice. Every read returns `None` once the
+/// data runs out, so a truncated blob ends parsing instead of panicking.
+struct ByteReader<'a> {
+    bytes: &'a [u8],
+}
+
+impl<'a> ByteReader<'a> {
+    fn new(bytes: &'a [u8]) -> Self {
+        Self { bytes }
     }
 
-    // Handle array of numbers
-    if let Some(bytes_array) = bytes_value.as_array() {
-        let bytes: Vec<u8> = bytes_array
-            .iter()
-            .filter_map(|v| v.as_u64().map(|n| n as u8))
-            .collect();
-        return Ok(bytes);
+    fn is_empty(&self) -> bool {
+        self.bytes.is_empty()
     }
 
-    Err(FigError::InvalidBlob(
-        "Blob bytes field is neither string nor array".to_string(),
-    ))
+    fn remaining(&self) -> usize {
+        self.bytes.len()
+    }
+
+    fn take<const N: usize>(&mut self) -> Option<[u8; N]> {
+        let head: [u8; N] = self.bytes.get(..N)?.try_into().ok()?;
+        self.bytes = &self.bytes[N..];
+        Some(head)
+    }
+
+    fn u8(&mut self) -> Option<u8> {
+        self.take().map(|[byte]: [u8; 1]| byte)
+    }
+
+    fn u32(&mut self) -> Option<u32> {
+        self.take().map(u32::from_le_bytes)
+    }
+
+    /// A `u32` count, as `usize`.
+    fn count(&mut self) -> Option<usize> {
+        self.u32().and_then(|n| usize::try_from(n).ok())
+    }
+
+    fn f32(&mut self) -> Option<f32> {
+        self.take().map(f32::from_le_bytes)
+    }
 }
 
 /// Parse binary path commands into JSON array
@@ -79,152 +124,21 @@ fn extract_blob_bytes(blob: &JsonValue) -> Result<Vec<u8>> {
 /// * `Some(JsonValue)` - Array of commands and coordinates
 /// * `None` - If data is invalid or incomplete
 pub fn parse_commands(bytes: &[u8]) -> Option<JsonValue> {
+    let mut reader = ByteReader::new(bytes);
     let mut commands = Vec::new();
-    let mut offset = 0;
 
-    while offset < bytes.len() {
-        let cmd_type = bytes[offset];
-        offset += 1;
-
-        match cmd_type {
-            0 => {
-                // Z - close path
-                commands.push(JsonValue::String("Z".to_string()));
-            }
-            1 => {
-                // M - move to (x, y)
-                if offset + 8 > bytes.len() {
-                    return None;
-                }
-                let x = f32::from_le_bytes([
-                    bytes[offset],
-                    bytes[offset + 1],
-                    bytes[offset + 2],
-                    bytes[offset + 3],
-                ]);
-                let y = f32::from_le_bytes([
-                    bytes[offset + 4],
-                    bytes[offset + 5],
-                    bytes[offset + 6],
-                    bytes[offset + 7],
-                ]);
-                offset += 8;
-                commands.push(JsonValue::String("M".to_string()));
-                commands.push(json_number(x));
-                commands.push(json_number(y));
-            }
-            2 => {
-                // L - line to (x, y)
-                if offset + 8 > bytes.len() {
-                    return None;
-                }
-                let x = f32::from_le_bytes([
-                    bytes[offset],
-                    bytes[offset + 1],
-                    bytes[offset + 2],
-                    bytes[offset + 3],
-                ]);
-                let y = f32::from_le_bytes([
-                    bytes[offset + 4],
-                    bytes[offset + 5],
-                    bytes[offset + 6],
-                    bytes[offset + 7],
-                ]);
-                offset += 8;
-                commands.push(JsonValue::String("L".to_string()));
-                commands.push(json_number(x));
-                commands.push(json_number(y));
-            }
-            3 => {
-                // Q - quadratic curve (cx, cy, x, y)
-                if offset + 16 > bytes.len() {
-                    return None;
-                }
-                let cx = f32::from_le_bytes([
-                    bytes[offset],
-                    bytes[offset + 1],
-                    bytes[offset + 2],
-                    bytes[offset + 3],
-                ]);
-                let cy = f32::from_le_bytes([
-                    bytes[offset + 4],
-                    bytes[offset + 5],
-                    bytes[offset + 6],
-                    bytes[offset + 7],
-                ]);
-                let x = f32::from_le_bytes([
-                    bytes[offset + 8],
-                    bytes[offset + 9],
-                    bytes[offset + 10],
-                    bytes[offset + 11],
-                ]);
-                let y = f32::from_le_bytes([
-                    bytes[offset + 12],
-                    bytes[offset + 13],
-                    bytes[offset + 14],
-                    bytes[offset + 15],
-                ]);
-                offset += 16;
-                commands.push(JsonValue::String("Q".to_string()));
-                commands.push(json_number(cx));
-                commands.push(json_number(cy));
-                commands.push(json_number(x));
-                commands.push(json_number(y));
-            }
-            4 => {
-                // C - cubic curve (cx1, cy1, cx2, cy2, x, y)
-                if offset + 24 > bytes.len() {
-                    return None;
-                }
-                let cx1 = f32::from_le_bytes([
-                    bytes[offset],
-                    bytes[offset + 1],
-                    bytes[offset + 2],
-                    bytes[offset + 3],
-                ]);
-                let cy1 = f32::from_le_bytes([
-                    bytes[offset + 4],
-                    bytes[offset + 5],
-                    bytes[offset + 6],
-                    bytes[offset + 7],
-                ]);
-                let cx2 = f32::from_le_bytes([
-                    bytes[offset + 8],
-                    bytes[offset + 9],
-                    bytes[offset + 10],
-                    bytes[offset + 11],
-                ]);
-                let cy2 = f32::from_le_bytes([
-                    bytes[offset + 12],
-                    bytes[offset + 13],
-                    bytes[offset + 14],
-                    bytes[offset + 15],
-                ]);
-                let x = f32::from_le_bytes([
-                    bytes[offset + 16],
-                    bytes[offset + 17],
-                    bytes[offset + 18],
-                    bytes[offset + 19],
-                ]);
-                let y = f32::from_le_bytes([
-                    bytes[offset + 20],
-                    bytes[offset + 21],
-                    bytes[offset + 22],
-                    bytes[offset + 23],
-                ]);
-                offset += 24;
-                commands.push(JsonValue::String("C".to_string()));
-                commands.push(json_number(cx1));
-                commands.push(json_number(cy1));
-                commands.push(json_number(cx2));
-                commands.push(json_number(cy2));
-                commands.push(json_number(x));
-                commands.push(json_number(y));
-            }
-            _ => {
-                // Unknown command type
-                return None;
-            }
+    while !reader.is_empty() {
+        let (command, coordinates) = match reader.u8()? {
+            0 => ("Z", 0),
+            1 => ("M", 2),
+            2 => ("L", 2),
+            3 => ("Q", 4),
+            4 => ("C", 6),
+            _ => return None, // Unknown command type
+        };
+        commands.push(JsonValue::String(command.to_string()));
+        for _ in 0..coordinates {
+            commands.push(json_number(reader.f32()?));
         }
     }
 
@@ -259,43 +173,19 @@ pub fn parse_commands(bytes: &[u8]) -> Option<JsonValue> {
 /// * `Some(JsonValue)` - Object with vertices, segments, and regions
 /// * `None` - If data is invalid or incomplete
 pub fn parse_vector_network(bytes: &[u8]) -> Option<JsonValue> {
-    if bytes.len() < 12 {
-        return None;
-    }
+    let mut reader = ByteReader::new(bytes);
 
-    // Read header
-    let vertex_count = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]) as usize;
-    let segment_count = u32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]) as usize;
-    let region_count = u32::from_le_bytes([bytes[8], bytes[9], bytes[10], bytes[11]]) as usize;
+    let vertex_count = reader.count()?;
+    let segment_count = reader.count()?;
+    let region_count = reader.count()?;
 
-    let mut offset = 12;
-
-    // Parse vertices
+    // The counts come from the file, so the vectors grow as data is actually read
+    // instead of being allocated up front from them.
     let mut vertices = Vec::new();
     for _ in 0..vertex_count {
-        if offset + 12 > bytes.len() {
-            return None;
-        }
-        let style_id = u32::from_le_bytes([
-            bytes[offset],
-            bytes[offset + 1],
-            bytes[offset + 2],
-            bytes[offset + 3],
-        ]);
-        let x = f32::from_le_bytes([
-            bytes[offset + 4],
-            bytes[offset + 5],
-            bytes[offset + 6],
-            bytes[offset + 7],
-        ]);
-        let y = f32::from_le_bytes([
-            bytes[offset + 8],
-            bytes[offset + 9],
-            bytes[offset + 10],
-            bytes[offset + 11],
-        ]);
-        offset += 12;
-
+        let style_id = reader.u32()?;
+        let x = reader.f32()?;
+        let y = reader.f32()?;
         vertices.push(serde_json::json!({
             "styleID": style_id,
             "x": json_number(x),
@@ -303,58 +193,20 @@ pub fn parse_vector_network(bytes: &[u8]) -> Option<JsonValue> {
         }));
     }
 
-    // Parse segments
+    let is_index_below = |index: u32, len: usize| usize::try_from(index).is_ok_and(|i| i < len);
+
     let mut segments = Vec::new();
     for _ in 0..segment_count {
-        if offset + 28 > bytes.len() {
-            return None;
-        }
-        let style_id = u32::from_le_bytes([
-            bytes[offset],
-            bytes[offset + 1],
-            bytes[offset + 2],
-            bytes[offset + 3],
-        ]);
-        let start_vertex = u32::from_le_bytes([
-            bytes[offset + 4],
-            bytes[offset + 5],
-            bytes[offset + 6],
-            bytes[offset + 7],
-        ]);
-        let start_dx = f32::from_le_bytes([
-            bytes[offset + 8],
-            bytes[offset + 9],
-            bytes[offset + 10],
-            bytes[offset + 11],
-        ]);
-        let start_dy = f32::from_le_bytes([
-            bytes[offset + 12],
-            bytes[offset + 13],
-            bytes[offset + 14],
-            bytes[offset + 15],
-        ]);
-        let end_vertex = u32::from_le_bytes([
-            bytes[offset + 16],
-            bytes[offset + 17],
-            bytes[offset + 18],
-            bytes[offset + 19],
-        ]);
-        let end_dx = f32::from_le_bytes([
-            bytes[offset + 20],
-            bytes[offset + 21],
-            bytes[offset + 22],
-            bytes[offset + 23],
-        ]);
-        let end_dy = f32::from_le_bytes([
-            bytes[offset + 24],
-            bytes[offset + 25],
-            bytes[offset + 26],
-            bytes[offset + 27],
-        ]);
-        offset += 28;
+        let style_id = reader.u32()?;
+        let start_vertex = reader.u32()?;
+        let start_dx = reader.f32()?;
+        let start_dy = reader.f32()?;
+        let end_vertex = reader.u32()?;
+        let end_dx = reader.f32()?;
+        let end_dy = reader.f32()?;
 
-        // Validate vertex indices
-        if start_vertex as usize >= vertex_count || end_vertex as usize >= vertex_count {
+        if !is_index_below(start_vertex, vertex_count) || !is_index_below(end_vertex, vertex_count)
+        {
             return None;
         }
 
@@ -373,20 +225,10 @@ pub fn parse_vector_network(bytes: &[u8]) -> Option<JsonValue> {
         }));
     }
 
-    // Parse regions
     let mut regions = Vec::new();
     for _ in 0..region_count {
-        if offset + 8 > bytes.len() {
-            return None;
-        }
-
         // styleID and winding rule are packed into one u32
-        let style_and_rule = u32::from_le_bytes([
-            bytes[offset],
-            bytes[offset + 1],
-            bytes[offset + 2],
-            bytes[offset + 3],
-        ]);
+        let style_and_rule = reader.u32()?;
         let winding_rule = if style_and_rule & 1 != 0 {
             "NONZERO"
         } else {
@@ -394,53 +236,23 @@ pub fn parse_vector_network(bytes: &[u8]) -> Option<JsonValue> {
         };
         let style_id = style_and_rule >> 1;
 
-        let loop_count = u32::from_le_bytes([
-            bytes[offset + 4],
-            bytes[offset + 5],
-            bytes[offset + 6],
-            bytes[offset + 7],
-        ]) as usize;
-        offset += 8;
-
+        let loop_count = reader.count()?;
         let mut loops = Vec::new();
         for _ in 0..loop_count {
-            if offset + 4 > bytes.len() {
+            let index_count = reader.count()?;
+            // Reject a count larger than the remaining data before reading any index
+            if index_count > reader.remaining() / 4 {
                 return None;
             }
-
-            let index_count = u32::from_le_bytes([
-                bytes[offset],
-                bytes[offset + 1],
-                bytes[offset + 2],
-                bytes[offset + 3],
-            ]) as usize;
-            offset += 4;
-
-            if offset + index_count * 4 > bytes.len() {
-                return None;
-            }
-
-            let mut indices = Vec::new();
+            let mut indices = Vec::with_capacity(index_count);
             for _ in 0..index_count {
-                let segment_index = u32::from_le_bytes([
-                    bytes[offset],
-                    bytes[offset + 1],
-                    bytes[offset + 2],
-                    bytes[offset + 3],
-                ]);
-                offset += 4;
-
-                // Validate segment index
-                if segment_index as usize >= segment_count {
+                let segment_index = reader.u32()?;
+                if !is_index_below(segment_index, segment_count) {
                     return None;
                 }
-
-                indices.push(JsonValue::Number(segment_index.into()));
+                indices.push(JsonValue::from(segment_index));
             }
-
-            loops.push(serde_json::json!({
-                "segments": indices
-            }));
+            loops.push(serde_json::json!({ "segments": indices }));
         }
 
         regions.push(serde_json::json!({
@@ -457,15 +269,9 @@ pub fn parse_vector_network(bytes: &[u8]) -> Option<JsonValue> {
     }))
 }
 
-/// Convert f32 to JSON number, handling special values
+/// Convert f32 to a JSON number; NaN and infinities (not valid in JSON) become `null`.
 fn json_number(value: f32) -> JsonValue {
-    if value.is_nan() || value.is_infinite() {
-        JsonValue::Null
-    } else {
-        serde_json::Number::from_f64(value as f64)
-            .map(JsonValue::Number)
-            .unwrap_or(JsonValue::Null)
-    }
+    serde_json::Number::from_f64(f64::from(value)).map_or(JsonValue::Null, JsonValue::Number)
 }
 
 #[cfg(test)]

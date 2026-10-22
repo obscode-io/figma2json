@@ -1,3 +1,6 @@
+//! Reading the .fig container: ZIP packaging, magic header, length-prefixed
+//! chunks and their compression.
+
 pub mod chunks;
 pub mod compression;
 pub mod header;

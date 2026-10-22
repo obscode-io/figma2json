@@ -10,7 +10,9 @@ use serde_json::Value as JsonValue;
 /// - `vectorNetworkBlob: 3` → `vectorNetwork: {vertices: [...], ...}`
 ///
 /// The blob index is used to look up the blob in the blobs array, which is then
-/// parsed based on the field name (with "Blob" suffix removed).
+/// parsed based on the field name (with "Blob" suffix removed). Fields of an
+/// unknown blob type, with an out-of-range index or with unparseable data are
+/// left as they are.
 ///
 /// # Arguments
 /// * `tree` - The JSON tree to modify (usually the document root)
@@ -18,10 +20,10 @@ use serde_json::Value as JsonValue;
 ///
 /// # Returns
 /// * `Ok(())` - Successfully substituted all blob references
-/// * `Err(FigError)` - If blob parsing or access fails
+/// * `Err(FigError::InvalidBlob)` - If a referenced blob has no readable `bytes`
 ///
 /// # Examples
-/// ```no_run
+/// ```
 /// use figma2json::blobs::substitute_blobs;
 /// use serde_json::json;
 ///
@@ -29,9 +31,9 @@ use serde_json::Value as JsonValue;
 ///     "commandsBlob": 0,
 ///     "children": []
 /// });
-/// let blobs = vec![json!({"bytes": vec![0u8]})];
+/// let blobs = vec![json!({"bytes": [0]})]; // a single "close path" command
 /// substitute_blobs(&mut tree, &blobs).unwrap();
-/// // tree now has "commands" field instead of "commandsBlob"
+/// assert_eq!(tree, json!({"commands": ["Z"], "children": []}));
 /// ```
 pub fn substitute_blobs(tree: &mut JsonValue, blobs: &[JsonValue]) -> Result<()> {
     substitute_blobs_recursive(tree, blobs)
@@ -45,16 +47,16 @@ fn substitute_blobs_recursive(value: &mut JsonValue, blobs: &[JsonValue]) -> Res
             let mut replacements = Vec::new();
 
             for (key, val) in map.iter() {
-                if key.ends_with("Blob") {
-                    if let Some(index) = val.as_u64() {
-                        let index = index as usize;
-                        if index < blobs.len() {
-                            // Parse the blob
-                            let blob_type = &key[..key.len() - 4]; // Remove "Blob" suffix
-                            if let Some(parsed) = parse_blob(blob_type, &blobs[index])? {
-                                replacements.push((key.clone(), blob_type.to_string(), parsed));
-                            }
-                        }
+                let Some(blob_type) = key.strip_suffix("Blob") else {
+                    continue;
+                };
+                let blob = val
+                    .as_u64()
+                    .and_then(|index| usize::try_from(index).ok())
+                    .and_then(|index| blobs.get(index));
+                if let Some(blob) = blob {
+                    if let Some(parsed) = parse_blob(blob_type, blob)? {
+                        replacements.push((key.clone(), blob_type.to_string(), parsed));
                     }
                 }
             }

@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+### Changed (library API)
+- `FigError` variants now describe the failure: `FigError::ZipError`, which was also used for failures unrelated
+  to ZIP files, is removed in favour of `Decode`, `Decompression`, `InvalidDocument` and `InvalidBlob`.
+  `IoError` is renamed `Io` and `ZipLibraryError` is renamed `Zip`. The enum is `#[non_exhaustive]`.
+- A blob `bytes` array holding a value that is not a byte (`0..=255`) is now an `InvalidBlob` error; it used to
+  be truncated or dropped silently. Files decoded from Figma are not affected.
+- A `*Blob` field of an unknown blob type no longer fails the conversion when its blob has no readable bytes;
+  it is left as is, like other unknown blob types.
+
+### Internal
+- The conversion pipeline is restructured and the transformation passes share one tree walker.
+- CLI: ZIP and single-file modes share one convert-and-write path; the .fig files of an archive are converted
+  in sorted order. Flags, help text, output paths and error messages are unchanged.
+- Parser and blob modules read binary data through bounds-checked helpers instead of manual indexing.
+  The decompression error no longer repeats "Decompression failed".
+- `Cargo.toml`: `rust-version = "1.88"` (required by the locked dependencies), `repository`,
+  `unsafe_code = "forbid"`, and a release profile with LTO, one codegen unit and stripped symbols.
+- CI runs on every push and pull request: `cargo fmt --check`, Clippy with `-D warnings`, tests on stable and on
+  the 1.88 MSRV, and `cargo doc` with warnings denied. All jobs use `--locked` and `Swatinem/rust-cache`.
+
 ## 0.4.0 (figma2json)
 
 Renamed from `fig2json` (fork of https://github.com/kreako/fig2json): the package, binary and library are now

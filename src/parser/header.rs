@@ -1,11 +1,14 @@
 use crate::error::{FigError, Result};
 use crate::types::FileType;
 
+/// Length of the magic header at the start of a .fig file
+const MAGIC_LEN: usize = 8;
+
 /// Magic header for standard Figma files
-const FIGMA_MAGIC: &[u8; 8] = b"fig-kiwi";
+const FIGMA_MAGIC: &[u8; MAGIC_LEN] = b"fig-kiwi";
 
 /// Magic header for FigJam files
-const FIGJAM_MAGIC: &[u8; 8] = b"fig-jam.";
+const FIGJAM_MAGIC: &[u8; MAGIC_LEN] = b"fig-jam.";
 
 /// ZIP magic signature (first two bytes)
 const ZIP_MAGIC: &[u8; 2] = b"PK";
@@ -17,7 +20,8 @@ const ZIP_MAGIC: &[u8; 2] = b"PK";
 ///
 /// # Returns
 /// * `Ok(FileType)` - Detected file type (Figma or FigJam)
-/// * `Err(FigError)` - If file is too small or has invalid header
+/// * `Err(FigError::FileTooSmall)` - If the file is shorter than the header
+/// * `Err(FigError::InvalidMagicHeader)` - If the header is neither of the above
 ///
 /// # Examples
 /// ```
@@ -27,27 +31,16 @@ const ZIP_MAGIC: &[u8; 2] = b"PK";
 /// let file_type = detect_file_type(bytes).unwrap();
 /// ```
 pub fn detect_file_type(bytes: &[u8]) -> Result<FileType> {
-    if bytes.len() < 8 {
-        return Err(FigError::FileTooSmall {
-            expected: 8,
-            actual: bytes.len(),
-        });
+    let header: &[u8; MAGIC_LEN] = bytes.first_chunk().ok_or(FigError::FileTooSmall {
+        expected: MAGIC_LEN,
+        actual: bytes.len(),
+    })?;
+
+    match header {
+        FIGMA_MAGIC => Ok(FileType::Figma),
+        FIGJAM_MAGIC => Ok(FileType::FigJam),
+        _ => Err(FigError::InvalidMagicHeader(header.to_vec())),
     }
-
-    let header = &bytes[0..8];
-
-    // Check for "fig-kiwi" (standard Figma)
-    if header == FIGMA_MAGIC {
-        return Ok(FileType::Figma);
-    }
-
-    // Check for "fig-jam." (FigJam)
-    if header == FIGJAM_MAGIC {
-        return Ok(FileType::FigJam);
-    }
-
-    // Invalid header
-    Err(FigError::InvalidMagicHeader(header.to_vec()))
 }
 
 /// Check if the file is a ZIP container
@@ -73,7 +66,7 @@ pub fn detect_file_type(bytes: &[u8]) -> Result<FileType> {
 /// assert!(!is_zip_container(fig_bytes));
 /// ```
 pub fn is_zip_container(bytes: &[u8]) -> bool {
-    bytes.len() >= 2 && &bytes[0..2] == ZIP_MAGIC
+    bytes.starts_with(ZIP_MAGIC)
 }
 
 #[cfg(test)]

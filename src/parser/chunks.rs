@@ -1,7 +1,7 @@
 use crate::error::{FigError, Result};
 use crate::types::ParsedFile;
 use std::fs;
-use std::io::{Cursor, Read};
+use std::io::{self, Cursor, Read};
 use std::path::Path;
 use zip::ZipArchive;
 
@@ -11,17 +11,21 @@ const MIN_FILE_SIZE: usize = 12;
 /// Minimum chunk header size (4 bytes for length)
 const CHUNK_HEADER_SIZE: usize = 4;
 
+/// Name of the Kiwi-encoded document inside a ZIP-packaged .fig
+const CANVAS_ENTRY: &str = "canvas.fig";
+
 /// Extract canvas.fig from a ZIP archive
 ///
-/// Some .fig files (especially larger ones) are stored as ZIP archives
-/// containing a `canvas.fig` file. This function extracts that file.
+/// A .fig saved from Figma is a ZIP archive containing a `canvas.fig` file
+/// (the document itself) plus its images. This function extracts that file.
 ///
 /// # Arguments
 /// * `bytes` - Raw ZIP file bytes
 ///
 /// # Returns
 /// * `Ok(Vec<u8>)` - Extracted canvas.fig file contents
-/// * `Err(FigError)` - If ZIP extraction fails or canvas.fig not found
+/// * `Err(FigError::Zip)` / `Err(FigError::Io)` - If the archive cannot be read
+/// * `Err(FigError::CanvasNotFoundInZip)` - If it has no `canvas.fig` entry
 ///
 /// # Examples
 /// ```no_run
@@ -31,15 +35,12 @@ const CHUNK_HEADER_SIZE: usize = 4;
 /// let canvas_bytes = extract_from_zip(&zip_bytes).unwrap();
 /// ```
 pub fn extract_from_zip(bytes: &[u8]) -> Result<Vec<u8>> {
-    let cursor = Cursor::new(bytes);
-    let mut archive = ZipArchive::new(cursor)?;
+    let mut archive = ZipArchive::new(Cursor::new(bytes))?;
 
-    // Look for "canvas.fig" entry
+    // First entry named "canvas.fig"
     for i in 0..archive.len() {
         let mut file = archive.by_index(i)?;
-        let name = file.name().to_string();
-
-        if name == "canvas.fig" {
+        if file.name() == CANVAS_ENTRY {
             let mut contents = Vec::new();
             file.read_to_end(&mut contents)?;
             return Ok(contents);
@@ -52,15 +53,18 @@ pub fn extract_from_zip(bytes: &[u8]) -> Result<Vec<u8>> {
 /// Extract entire ZIP archive to a directory
 ///
 /// Extracts all files from a ZIP archive to the specified directory,
-/// preserving the directory structure from the ZIP file.
+/// preserving the directory structure from the ZIP file. Entries whose path
+/// would land outside `target_dir` (absolute paths, `..`) are skipped.
 ///
 /// # Arguments
 /// * `bytes` - Raw ZIP file bytes
-/// * `target_dir` - Directory to extract files to (must not exist)
+/// * `target_dir` - Directory to extract files to (created if missing; existing
+///   files with the same names are overwritten)
 ///
 /// # Returns
 /// * `Ok(())` - If extraction succeeds
-/// * `Err(FigError)` - If extraction fails
+/// * `Err(FigError::Zip)` - If the archive cannot be read
+/// * `Err(FigError::Io)` - If a file or directory cannot be written
 ///
 /// # Examples
 /// ```no_run
@@ -71,34 +75,25 @@ pub fn extract_from_zip(bytes: &[u8]) -> Result<Vec<u8>> {
 /// extract_zip_to_directory(&zip_bytes, Path::new("output")).unwrap();
 /// ```
 pub fn extract_zip_to_directory(bytes: &[u8], target_dir: &Path) -> Result<()> {
-    let cursor = Cursor::new(bytes);
-    let mut archive = ZipArchive::new(cursor)?;
+    let mut archive = ZipArchive::new(Cursor::new(bytes))?;
 
-    // Create target directory
     fs::create_dir_all(target_dir)?;
 
-    // Extract each file
     for i in 0..archive.len() {
         let mut file = archive.by_index(i)?;
-        let file_path = match file.enclosed_name() {
-            Some(path) => path.to_owned(),
-            None => continue, // Skip files with unsafe names
+        // `enclosed_name` rejects paths that would escape `target_dir`
+        let Some(output_path) = file.enclosed_name().map(|name| target_dir.join(name)) else {
+            continue;
         };
 
-        let output_path = target_dir.join(&file_path);
-
         if file.is_dir() {
-            // Create directory
             fs::create_dir_all(&output_path)?;
         } else {
-            // Create parent directories if needed
             if let Some(parent) = output_path.parent() {
                 fs::create_dir_all(parent)?;
             }
-
-            // Extract file
             let mut output_file = fs::File::create(&output_path)?;
-            std::io::copy(&mut file, &mut output_file)?;
+            io::copy(&mut file, &mut output_file)?;
         }
     }
 
@@ -119,11 +114,14 @@ pub fn extract_zip_to_directory(bytes: &[u8], target_dir: &Path) -> Result<()> {
 /// ```
 ///
 /// # Arguments
-/// * `bytes` - Raw .fig file bytes (after magic header validation)
+/// * `bytes` - Raw .fig file bytes, magic header included (the header itself is
+///   not checked here; see [`detect_file_type`](crate::parser::detect_file_type))
 ///
 /// # Returns
 /// * `Ok(ParsedFile)` - Parsed file with version and chunks
-/// * `Err(FigError)` - If parsing fails
+/// * `Err(FigError::FileTooSmall)` - If the file is shorter than header + version
+/// * `Err(FigError::IncompleteChunk)` - If a chunk is longer than the remaining data
+/// * `Err(FigError::NotEnoughChunks)` - If there is no schema and data chunk
 ///
 /// # Examples
 /// ```no_run
@@ -135,50 +133,30 @@ pub fn extract_zip_to_directory(bytes: &[u8], target_dir: &Path) -> Result<()> {
 /// println!("Chunks: {}", parsed.chunks.len());
 /// ```
 pub fn extract_chunks(bytes: &[u8]) -> Result<ParsedFile> {
-    // Validate minimum file size
-    if bytes.len() < MIN_FILE_SIZE {
-        return Err(FigError::FileTooSmall {
-            expected: MIN_FILE_SIZE,
-            actual: bytes.len(),
-        });
-    }
+    // Version follows the 8-byte magic header (present iff the file has MIN_FILE_SIZE bytes)
+    let version = read_u32_le(bytes, 8).ok_or(FigError::FileTooSmall {
+        expected: MIN_FILE_SIZE,
+        actual: bytes.len(),
+    })?;
 
-    // Read version at offset 8 (after 8-byte magic header)
-    let version = u32::from_le_bytes([bytes[8], bytes[9], bytes[10], bytes[11]]);
-
-    // Extract all chunks starting at offset 12
+    // Chunks start at offset 12. Trailing bytes too short for a chunk header are ignored.
     let mut chunks = Vec::new();
-    let mut offset = 12;
+    let mut offset = MIN_FILE_SIZE;
 
-    while offset < bytes.len() {
-        // Check if we have enough bytes for chunk header
-        if offset + CHUNK_HEADER_SIZE > bytes.len() {
-            // No more complete chunks, we're done
-            break;
-        }
-
-        // Read chunk length (4 bytes, little-endian)
-        let chunk_length = u32::from_le_bytes([
-            bytes[offset],
-            bytes[offset + 1],
-            bytes[offset + 2],
-            bytes[offset + 3],
-        ]) as usize;
-        offset += CHUNK_HEADER_SIZE;
-
-        // Validate we have enough bytes for the chunk data
-        if offset + chunk_length > bytes.len() {
-            return Err(FigError::IncompleteChunk {
-                offset: offset - CHUNK_HEADER_SIZE,
+    while let Some(chunk_length) = read_u32_le(bytes, offset) {
+        // u32 -> usize is lossless on every target with at least 32-bit pointers
+        let chunk_length = chunk_length as usize;
+        let start = offset + CHUNK_HEADER_SIZE;
+        let chunk = bytes[start..]
+            .get(..chunk_length)
+            .ok_or(FigError::IncompleteChunk {
+                offset,
                 expected: chunk_length,
-                actual: bytes.len() - offset,
-            });
-        }
+                actual: bytes.len() - start,
+            })?;
 
-        // Extract chunk data
-        let chunk_data = bytes[offset..offset + chunk_length].to_vec();
-        chunks.push(chunk_data);
-        offset += chunk_length;
+        chunks.push(chunk.to_vec());
+        offset = start + chunk_length;
     }
 
     // Validate we have at least 2 chunks (schema + data)
@@ -190,6 +168,13 @@ pub fn extract_chunks(bytes: &[u8]) -> Result<ParsedFile> {
     }
 
     Ok(ParsedFile::new(version, chunks))
+}
+
+/// Little-endian `u32` at `offset`, or `None` when fewer than 4 bytes remain.
+fn read_u32_le(bytes: &[u8], offset: usize) -> Option<u32> {
+    let end = offset.checked_add(4)?;
+    let word = bytes.get(offset..end)?;
+    Some(u32::from_le_bytes(word.try_into().ok()?))
 }
 
 #[cfg(test)]
@@ -292,5 +277,85 @@ mod tests {
             }
             _ => panic!("Expected NotEnoughChunks error"),
         }
+    }
+
+    #[test]
+    fn test_extract_chunks_reports_incomplete_chunk_position() {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"fig-kiwi");
+        bytes.extend_from_slice(&48u32.to_le_bytes());
+        bytes.extend_from_slice(&u32::MAX.to_le_bytes());
+        bytes.extend_from_slice(b"short");
+
+        match extract_chunks(&bytes) {
+            Err(FigError::IncompleteChunk {
+                offset,
+                expected,
+                actual,
+            }) => {
+                assert_eq!(offset, 12);
+                assert_eq!(expected, u32::MAX as usize);
+                assert_eq!(actual, 5);
+            }
+            other => panic!("Expected IncompleteChunk error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_extract_chunks_ignores_trailing_partial_header() {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"fig-kiwi");
+        bytes.extend_from_slice(&48u32.to_le_bytes());
+        for chunk in [&b"schema"[..], b"data"] {
+            bytes.extend_from_slice(&(chunk.len() as u32).to_le_bytes());
+            bytes.extend_from_slice(chunk);
+        }
+        bytes.extend_from_slice(&[1, 2, 3]);
+
+        let parsed = extract_chunks(&bytes).unwrap();
+        assert_eq!(parsed.chunks, vec![b"schema".to_vec(), b"data".to_vec()]);
+    }
+
+    fn zip_with(entries: &[(&str, &[u8])]) -> Vec<u8> {
+        use std::io::Write;
+        let mut writer = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        for (name, contents) in entries {
+            writer
+                .start_file(*name, zip::write::FileOptions::default())
+                .unwrap();
+            writer.write_all(contents).unwrap();
+        }
+        writer.finish().unwrap().into_inner()
+    }
+
+    #[test]
+    fn test_extract_from_zip() {
+        let zip = zip_with(&[("images/a", b"img"), ("canvas.fig", b"fig-kiwi")]);
+        assert_eq!(extract_from_zip(&zip).unwrap(), b"fig-kiwi");
+
+        let zip = zip_with(&[("other.fig", b"fig-kiwi")]);
+        assert!(matches!(
+            extract_from_zip(&zip),
+            Err(FigError::CanvasNotFoundInZip)
+        ));
+    }
+
+    #[test]
+    fn test_extract_zip_to_directory_skips_escaping_paths() {
+        let root =
+            std::env::temp_dir().join(format!("figma2json-extract-test-{}", std::process::id()));
+        let target = root.join("out");
+        let zip = zip_with(&[
+            ("canvas.fig", b"fig-kiwi"),
+            ("images/a", b"img"),
+            ("../escaped", b"no"),
+        ]);
+
+        extract_zip_to_directory(&zip, &target).unwrap();
+
+        assert_eq!(fs::read(target.join("canvas.fig")).unwrap(), b"fig-kiwi");
+        assert_eq!(fs::read(target.join("images/a")).unwrap(), b"img");
+        assert!(!root.join("escaped").exists());
+        fs::remove_dir_all(&root).unwrap();
     }
 }

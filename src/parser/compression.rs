@@ -1,6 +1,6 @@
 use crate::error::{FigError, Result};
 use flate2::read::DeflateDecoder;
-use std::io::Read;
+use std::io::{self, Read};
 
 /// PNG magic signature (first two bytes: 137, 80)
 const PNG_MAGIC: &[u8; 2] = &[137, 80];
@@ -36,30 +36,14 @@ const JPEG_MAGIC: &[u8; 2] = &[255, 216];
 /// assert!(!is_already_compressed(other_data));
 /// ```
 pub fn is_already_compressed(bytes: &[u8]) -> bool {
-    if bytes.len() < 2 {
-        return false;
-    }
-
-    let magic = &bytes[0..2];
-
-    // Check for PNG: [137, 80]
-    if magic == PNG_MAGIC {
-        return true;
-    }
-
-    // Check for JPEG: [255, 216]
-    if magic == JPEG_MAGIC {
-        return true;
-    }
-
-    false
+    bytes.starts_with(PNG_MAGIC) || bytes.starts_with(JPEG_MAGIC)
 }
 
 /// Decompress chunk data using DEFLATE or Zstandard
 ///
 /// Figma uses two compression formats:
-/// - DEFLATE (zlib) - More common, used in older files
-/// - Zstandard - Used in newer files
+/// - raw DEFLATE (no zlib header) - used in older files
+/// - Zstandard - used in newer files
 ///
 /// This function tries DEFLATE first, then falls back to Zstandard if DEFLATE fails.
 /// If the data is already compressed (PNG/JPEG), it returns the data as-is.
@@ -69,14 +53,14 @@ pub fn is_already_compressed(bytes: &[u8]) -> bool {
 ///
 /// # Returns
 /// * `Ok(Vec<u8>)` - Decompressed data
-/// * `Err(FigError)` - If both decompression methods fail
+/// * `Err(FigError::Decompression)` - If both decompression methods fail
 ///
 /// # Examples
-/// ```no_run
+/// ```
 /// use figma2json::parser::compression::decompress_chunk;
 ///
-/// let compressed_data = vec![120, 156, 75, 76, 28, 5, 0, 1, 153, 0, 206];
-/// let decompressed = decompress_chunk(&compressed_data).unwrap();
+/// let compressed = zstd::encode_all(&b"fig-kiwi"[..], 3).unwrap();
+/// assert_eq!(decompress_chunk(&compressed).unwrap(), b"fig-kiwi");
 /// ```
 pub fn decompress_chunk(bytes: &[u8]) -> Result<Vec<u8>> {
     // Skip decompression for already compressed images
@@ -84,36 +68,20 @@ pub fn decompress_chunk(bytes: &[u8]) -> Result<Vec<u8>> {
         return Ok(bytes.to_vec());
     }
 
-    // Try DEFLATE (zlib) first - more common
-    match decompress_deflate(bytes) {
-        Ok(data) => Ok(data),
-        Err(_) => {
-            // DEFLATE failed, try Zstandard
-            match decompress_zstd(bytes) {
-                Ok(data) => Ok(data),
-                Err(e) => Err(FigError::Decompression(format!(
-                    "Failed to decompress chunk (tried both DEFLATE and Zstandard): {}",
-                    e
-                ))),
-            }
-        }
-    }
+    decompress_deflate(bytes)
+        .or_else(|_| zstd::decode_all(bytes))
+        .map_err(|e| {
+            FigError::Decompression(format!(
+                "Failed to decompress chunk (tried both DEFLATE and Zstandard): {e}"
+            ))
+        })
 }
 
 /// Decompress data using DEFLATE (raw, without zlib wrapper)
-fn decompress_deflate(bytes: &[u8]) -> Result<Vec<u8>> {
-    let mut decoder = DeflateDecoder::new(bytes);
+fn decompress_deflate(bytes: &[u8]) -> io::Result<Vec<u8>> {
     let mut decompressed = Vec::new();
-    decoder
-        .read_to_end(&mut decompressed)
-        .map_err(|e| FigError::Decompression(format!("DEFLATE decompression failed: {}", e)))?;
+    DeflateDecoder::new(bytes).read_to_end(&mut decompressed)?;
     Ok(decompressed)
-}
-
-/// Decompress data using Zstandard
-fn decompress_zstd(bytes: &[u8]) -> Result<Vec<u8>> {
-    zstd::decode_all(bytes)
-        .map_err(|e| FigError::Decompression(format!("Zstandard decompression failed: {}", e)))
 }
 
 #[cfg(test)]
