@@ -1,62 +1,36 @@
 # Changelog
 
-## Unreleased
+All notable changes to this project are documented here. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/).
 
-### Changed (library API)
-- `FigError` variants now describe the failure: `FigError::ZipError`, which was also used for failures unrelated
-  to ZIP files, is removed in favour of `Decode`, `Decompression`, `InvalidDocument` and `InvalidBlob`.
-  `IoError` is renamed `Io` and `ZipLibraryError` is renamed `Zip`. The enum is `#[non_exhaustive]`.
-- A blob `bytes` array holding a value that is not a byte (`0..=255`) is now an `InvalidBlob` error; it used to
-  be truncated or dropped silently. Files decoded from Figma are not affected.
-- A `*Blob` field of an unknown blob type no longer fails the conversion when its blob has no readable bytes;
-  it is left as is, like other unknown blob types.
+## [Unreleased]
 
-### Internal
-- The conversion pipeline is restructured and the transformation passes share one tree walker.
-- CLI: ZIP and single-file modes share one convert-and-write path; the .fig files of an archive are converted
-  in sorted order. Flags, help text, output paths and error messages are unchanged.
-- Parser and blob modules read binary data through bounds-checked helpers instead of manual indexing.
-  The decompression error no longer repeats "Decompression failed".
-- `Cargo.toml`: `rust-version = "1.88"` (required by the locked dependencies), `repository`,
-  `unsafe_code = "forbid"`, and a release profile with LTO, one codegen unit and stripped symbols.
-- CI runs on every push and pull request: `cargo fmt --check`, Clippy with `-D warnings`, tests on stable and on
-  the 1.88 MSRV, and `cargo doc` with warnings denied. All jobs use `--locked` and `Swatinem/rust-cache`.
+## [0.0.1]
 
-## 0.4.0
+First release.
 
 ### Added
-- Node `id` (Figma node id) and `type` on every node; public type names (`COMPONENT`, `COMPONENT_SET` for state-group frames, `RECTANGLE`).
-- Instances name their component: `componentId`, `componentName`, `componentSetName`.
-- Variable bindings name their variable: `variable`, `variableCollection` and `variableId` next to every `ALIAS`.
-- Shared style names on nodes: `fillStyle`, `strokeStyle`, `textStyle`, `effectStyle`, `gridStyle`.
-- Root `variables` (collections, modes, per-mode values, scopes, usage counts) and `styles` (values, usage counts).
-- `--keep-internal` flag (`ConvertOptions::keep_internal`): keep the hidden page with local copies of the library
-  components the file uses, so instances of library components can be resolved.
-- `--legacy` flag (and `ConvertOptions` / `convert_with_options` in the library) for the previous output.
+- `figma2json` CLI: converts a `.fig` saved from Figma (a ZIP archive) into an output directory, or a bare
+  `canvas.fig` to stdout / a file. Flags: `-o`, `--compact`, `--raw`, `--keep-internal`, `--legacy`, `-v`.
+- Library API: `convert`, `convert_with_options` (`ConvertOptions { legacy, keep_internal }`), `convert_raw`,
+  plus the parser, Kiwi decoder, tree builder, blob parser and every transformation pass as public modules.
+- Design context in the output: node `id` and public `type` on every node; `componentId`, `componentName`,
+  `componentSetName` on instances; `variable`, `variableCollection`, `variableId` next to every `ALIAS`;
+  `fillStyle`, `strokeStyle`, `textStyle`, `effectStyle`, `gridStyle`; root `variables` and `styles` with
+  per-mode values and usage counts.
+- Auto-layout alignment and sizing, constraints, `scrollBehavior`, `layoutGrids` and override `guidPath`s are
+  kept; every padding value Figma stores is kept (a missing side is 0). Internal `{sessionID, localID}`
+  references become `"s:l"` strings.
+- `--keep-internal`: keeps the hidden page with local copies of the library components the file uses.
+- `--legacy`: a smaller output without design context (no ids, types, token or style names, auto-layout
+  alignment/sizing, constraints, layout grids or override paths).
+- Memory-conscious decoding: Kiwi data is decoded straight to JSON, glyphs and geometry are dropped before blob
+  expansion, and output is streamed to disk.
+- Python helpers in `tools/` that split `canvas.json` into an agent-friendly per-screen cache.
+- Errors are typed (`FigError`: `InvalidMagicHeader`, `FileTooSmall`, `IncompleteChunk`, `NotEnoughChunks`,
+  `CanvasNotFoundInZip`, `Decompression`, `Decode`, `InvalidDocument`, `InvalidBlob`, `Io`, `Zip`).
+- CI: `cargo fmt --check`, Clippy with `-D warnings`, tests on stable and on the 1.88 MSRV, `cargo doc` with
+  warnings denied.
 
-### Kept (previously removed)
-- Auto-layout alignment and sizing (`stackPrimaryAlignItems`, `stackCounterAlignItems`, `stackPrimarySizing`,
-  `stackCounterSizing`, `stackChildPrimaryGrow`, `stackChildAlignSelf`), constraints, `scrollBehavior`,
-  `layoutGrids`, override `guidPath`s. Internal `{sessionID, localID}` references become `"s:l"` strings.
-
-### Fixed
-- Right/bottom auto-layout padding was dropped whenever left/top padding existed, even when different
-  (asymmetric padding came out symmetric). The default output now keeps every padding value Figma stores (Figma
-  omits sides that are 0, so a missing side is 0). `--legacy` removes right/bottom only when equal to left/top.
-- Instance-swap and slot property values (`symbolIdValue`, `slotContentIdValue`) and other `{guid: ...}` /
-  `{assetRef: ...}` references were emptied by guid removal; they are now `"s:l"` node ids (library references
-  resolve to the file's local copy when present).
-- `styleID` and `windingRule` were removed everywhere by the geometry pass, which broke mixed-style text
-  (`characterStyleIDs` pointed at `styleOverrideTable` entries with no `styleID`). The default output only
-  removes the geometry itself; `--legacy` keeps the old behaviour.
-- `styleIdForEffect` and `styleIdForGrid` references are now removed like the other `styleIdFor*` fields
-  (their names are in `effectStyle` / `gridStyle`).
-- Enum values inside arrays (e.g. `variableScopes`, `toggledOffOTFeatures`) were left as `{"__enum__": ...}` objects.
-- Out-of-memory on large files: Kiwi data is decoded straight to JSON (blob bytes as base64, not one JSON number
-  per byte), node and blob data are moved instead of cloned, glyphs and geometry are dropped before blob expansion,
-  and output is streamed to disk. Example: a file that was killed at 6 GB now peaks at ~3.9 GB; a smaller one went
-  from 2 GB to ~0.6 GB. Output is unchanged by these memory fixes.
-- Clippy error in `image_hash.rs`.
-- README examples that fail on `.fig` files saved from Figma (they are ZIP archives and need an output directory);
-  clearer help text and error messages for that case.
-- Writing to a closed pipe (`figma2json canvas.fig | head`) printed a "Broken pipe" error; it now exits quietly.
+[Unreleased]: https://github.com/obsidian-code-io/figma2json/compare/v0.0.1...HEAD
+[0.0.1]: https://github.com/obsidian-code-io/figma2json/releases/tag/v0.0.1

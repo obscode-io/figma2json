@@ -38,7 +38,7 @@ struct Cli {
     #[arg(long)]
     raw: bool,
 
-    /// Pre-0.4 output: drop node ids/types, variable and style names,
+    /// Smaller output without design context: drop node ids/types, variable and style names,
     /// the root `variables`/`styles`, auto-layout alignment/sizing, constraints,
     /// scroll behavior, layout grids and override paths
     #[arg(long)]

@@ -26,7 +26,7 @@ use crate::{blobs, parser};
 /// Options for [`convert_with_options`].
 #[derive(Debug, Clone, Default)]
 pub struct ConvertOptions {
-    /// Reproduce the pre-0.4 output: no node ids or types, no variable
+    /// Produce a smaller output without design context: no node ids or types, no variable
     /// or style names, no `variables`/`styles` at the root, and auto-layout
     /// alignment, sizing, constraints, scroll behavior, layout grids and override
     /// paths removed. Off by default because implementing a design needs them.
@@ -235,8 +235,8 @@ impl When {
 /// JSON (on large files that expansion alone used gigabytes of memory). Neither
 /// pass depends on blob content, so the output is unchanged.
 ///
-/// Legacy geometry removal also strips every `windingRule`/`styleID`, as
-/// before 0.4; the default mode keeps them (text style runs, vector regions).
+/// Legacy geometry removal also strips every `windingRule`/`styleID`;
+/// the default mode keeps them (text style runs, vector regions).
 const PRUNE: &[(Pass, When)] = &[
     (schema::remove_text_glyphs, When::Always),
     (schema::remove_geometry_fields, When::LegacyOnly),

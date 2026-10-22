@@ -1,6 +1,6 @@
 [package]
 name = "figma2json"
-version = "0.4.0"
+version = "0.0.1"
 edition = "2021"
 # Set by the locked dependency tree (`time`, pulled in by `zip`, needs 1.88);
 # CI builds and tests this version with `--locked`.

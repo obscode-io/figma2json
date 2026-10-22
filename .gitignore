@@ -26,7 +26,6 @@ rustc-ice-*.txt
 # Local files
 archives
 .DS_Store
-CLAUDE.md
 big
 TODO.md
 __pycache__/

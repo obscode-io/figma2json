@@ -63,7 +63,7 @@ figma2json out/canvas.fig -o design.json  # JSON to a file
 | `--compact`           | Compact JSON instead of indented.                                                                  |
 | `--raw`               | Also write `*.raw.json`: the decoded file with no transformations applied.                         |
 | `--keep-internal`     | Keep internal-only nodes, including the hidden page with local copies of library components.       |
-| `--legacy`            | Smaller pre-0.4 output: no ids, types, token or style names, and no auto-layout alignment/sizing.  |
+| `--legacy`            | Smaller output without design context: no ids, types, token or style names, and no auto-layout alignment/sizing.  |
 | `-v, --verbose`       | Log each step to stderr.                                                                           |
 | `-h, --help`          | Show help.                                                                                         |
 | `-V, --version`       | Show version.                                                                                      |
