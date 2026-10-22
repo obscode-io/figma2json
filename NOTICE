@@ -1,0 +1,25 @@
+figma2json
+Copyright 2026 Obs Code
+
+This product is developed and maintained by Obs Code
+(https://github.com/obscode-io/figma2json).
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not
+use this software except in compliance with the License. You may obtain a copy
+of the License in the LICENSE file or at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed
+under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
+CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+
+Attribution
+
+Under Section 4(d) of the License, any redistribution of this software or of a
+work derived from it, in source or binary form, must include a readable copy of
+this NOTICE file, and any distributed derivative work must carry prominent
+notices stating that the files were changed. Please credit the project as:
+
+    figma2json by Obs Code - https://github.com/obscode-io/figma2json

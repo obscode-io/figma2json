@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>figma2json</title>
+  <meta name="description" content="Convert Figma .fig files to clean, compact JSON for LLMs and code generators. Runs entirely in your browser.">
+  <meta name="color-scheme" content="light dark">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%235b5bd6'/%3E%3Ctext x='16' y='22' font-family='monospace' font-size='15' font-weight='700' fill='white' text-anchor='middle'%3E%7B%7D%3C/text%3E%3C/svg%3E">
+  <script>
+    try {
+      const theme = localStorage.getItem("theme");
+      if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
+    } catch {}
+  </script>
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <div class="wrap header-row">
+      <div class="brand">
+        <span class="logo" aria-hidden="true">{ }</span>
+        <span class="brand-name">figma2json</span>
+      </div>
+      <div class="header-actions">
+        <div class="theme-switch" role="radiogroup" aria-label="Color theme">
+          <label title="Use the system setting">
+            <input type="radio" name="theme" value="system" checked>
+            <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M3 5h18v11H3zM8 20h8M12 16v4"/></svg>
+            <span>System</span>
+          </label>
+          <label title="Light theme">
+            <input type="radio" name="theme" value="light">
+            <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></g></svg>
+            <span>Light</span>
+          </label>
+          <label title="Dark theme">
+            <input type="radio" name="theme" value="dark">
+            <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/></svg>
+            <span>Dark</span>
+          </label>
+        </div>
+        <a class="header-link" href="https://github.com/obscode-io/figma2json">GitHub</a>
+      </div>
+    </div>
+  </header>
+
+  <main id="main" class="wrap">
+    <section class="intro">
+      <h1>Figma file to LLM-ready JSON</h1>
+      <p class="lede">Drop a <code>.fig</code> file to get the layer tree with layout, auto-layout, colors, text styles, and the variables, styles and components each layer uses.</p>
+      <p class="privacy">
+        <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 2a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-1V7a5 5 0 0 0-5-5Zm-3 8V7a3 3 0 1 1 6 0v3H9Z"/></svg>
+        <span><strong>Your file never leaves your browser.</strong> Conversion runs locally in WebAssembly; nothing is uploaded.</span>
+      </p>
+    </section>
+
+    <section class="card" aria-labelledby="input-heading">
+      <h2 id="input-heading" class="visually-hidden">Choose a file</h2>
+      <div id="dropzone" class="dropzone">
+        <svg class="drop-icon" aria-hidden="true" viewBox="0 0 24 24" width="40" height="40"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M12 16V4m0 0-4 4m4-4 4 4M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+        <p class="drop-title">Drag and drop a <code>.fig</code> file here</p>
+        <p class="drop-or">or</p>
+        <input id="file-input" class="visually-hidden" type="file" accept=".fig,.zip,application/zip">
+        <label class="button primary" for="file-input">Choose a file</label>
+        <p class="hint">In Figma, use <strong>File → Save local copy…</strong> to get a <code>.fig</code>.</p>
+      </div>
+
+      <fieldset class="options">
+        <legend>Options</legend>
+        <label class="option">
+          <input type="checkbox" id="opt-keep-internal">
+          <span><span class="option-name">Keep internal nodes</span><span class="option-help">Includes the hidden page with local copies of library components.</span></span>
+        </label>
+        <label class="option">
+          <input type="checkbox" id="opt-legacy">
+          <span><span class="option-name">Legacy output</span><span class="option-help">Smaller, without ids, types, token or style names and auto-layout sizing.</span></span>
+        </label>
+        <label class="option">
+          <input type="checkbox" id="opt-raw">
+          <span><span class="option-name">Also raw JSON</span><span class="option-help">Adds <code>canvas.raw.json</code>: the decoded file, untransformed.</span></span>
+        </label>
+      </fieldset>
+    </section>
+
+    <section id="status" class="status" aria-live="polite" hidden>
+      <div class="status-row">
+        <span id="status-text">Working…</span>
+        <span id="status-time" class="muted"></span>
+      </div>
+      <div id="progress" class="progress" role="progressbar" aria-label="Conversion in progress"><span></span></div>
+    </section>
+
+    <div id="error" class="error" role="alert" hidden>
+      <strong>Conversion failed.</strong>
+      <span id="error-text"></span>
+    </div>
+
+    <section id="result" class="card result" aria-labelledby="result-heading" hidden>
+      <div class="result-head">
+        <div>
+          <h2 id="result-heading">Converted <span id="result-name"></span></h2>
+          <p id="result-summary" class="muted"></p>
+        </div>
+        <div class="actions">
+          <button type="button" class="button primary" id="download-zip">Download ZIP</button>
+          <button type="button" class="button" id="download-json">Download canvas.json</button>
+          <button type="button" class="button" id="download-raw" hidden>Download canvas.raw.json</button>
+          <button type="button" class="button" id="copy-json">Copy JSON</button>
+        </div>
+      </div>
+      <p class="muted small">The ZIP holds <code>canvas.json</code> and the <code>images/</code> it references, as the CLI writes them. Point your LLM at it: <em>“Implement the design in canvas.json. Images are in images/.”</em></p>
+      <div class="preview-head">
+        <h3>Preview</h3>
+        <span id="preview-note" class="muted small"></span>
+      </div>
+      <pre id="preview" class="preview" tabindex="0" aria-label="JSON preview"><code id="preview-code"></code></pre>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <p>figma2json <span id="version"></span> · Apache-2.0 licensed · Prefer the terminal? <a href="https://github.com/obscode-io/figma2json#installation">Install the CLI</a>.</p>
+    </div>
+  </footer>
+</body>
+</html>
