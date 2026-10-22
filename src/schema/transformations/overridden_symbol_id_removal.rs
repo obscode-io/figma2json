@@ -439,13 +439,22 @@ mod tests {
 
         // Verify the kept objects
         assert!(overrides[0].get("textData").is_some());
-        assert_eq!(overrides[0]["textData"]["characters"].as_str(), Some("Roles"));
+        assert_eq!(
+            overrides[0]["textData"]["characters"].as_str(),
+            Some("Roles")
+        );
 
         assert!(overrides[1].get("textData").is_some());
-        assert_eq!(overrides[1]["textData"]["characters"].as_str(), Some("Members"));
+        assert_eq!(
+            overrides[1]["textData"]["characters"].as_str(),
+            Some("Members")
+        );
 
         assert!(overrides[2].get("textData").is_some());
-        assert_eq!(overrides[2]["textData"]["characters"].as_str(), Some("Audit"));
+        assert_eq!(
+            overrides[2]["textData"]["characters"].as_str(),
+            Some("Audit")
+        );
 
         assert_eq!(overrides[3].get("visible").unwrap().as_bool(), Some(false));
 

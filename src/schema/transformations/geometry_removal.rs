@@ -598,9 +598,7 @@ mod tests {
         // But derivedSymbolData is an array, so it gets recursed differently
         // The geometry in derivedSymbolData should be removed because derivedSymbolData elements
         // themselves don't have exportSettings
-        assert!(tree["derivedSymbolData"][0]
-            .get("fillGeometry")
-            .is_none());
+        assert!(tree["derivedSymbolData"][0].get("fillGeometry").is_none());
     }
 
     #[test]
@@ -678,6 +676,9 @@ mod tests {
         assert!(tree.get("fillGeometry").is_none());
         assert_eq!(tree["textData"]["styleOverrideTable"][0]["styleID"], 91);
         assert_eq!(tree["vectorNetwork"]["regions"][0]["styleID"], 2);
-        assert_eq!(tree["vectorNetwork"]["regions"][0]["windingRule"], "NONZERO");
+        assert_eq!(
+            tree["vectorNetwork"]["regions"][0]["windingRule"],
+            "NONZERO"
+        );
     }
 }

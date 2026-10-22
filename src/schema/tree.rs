@@ -132,7 +132,6 @@ fn format_parent_guid(parent_index: &JsonValue) -> Result<String> {
     Ok(format!("{}:{}", session_id, local_id))
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -197,8 +196,14 @@ mod tests {
         // Check children
         let children = root.get("children").and_then(|v| v.as_array()).unwrap();
         assert_eq!(children.len(), 2);
-        assert_eq!(children[0].get("name").and_then(|v| v.as_str()), Some("Child1"));
-        assert_eq!(children[1].get("name").and_then(|v| v.as_str()), Some("Child2"));
+        assert_eq!(
+            children[0].get("name").and_then(|v| v.as_str()),
+            Some("Child1")
+        );
+        assert_eq!(
+            children[1].get("name").and_then(|v| v.as_str()),
+            Some("Child2")
+        );
 
         // Check parentIndex is removed
         assert!(children[0].get("parentIndex").is_none());
@@ -241,8 +246,17 @@ mod tests {
         let children = root.get("children").and_then(|v| v.as_array()).unwrap();
 
         // Check sorted order
-        assert_eq!(children[0].get("name").and_then(|v| v.as_str()), Some("First"));
-        assert_eq!(children[1].get("name").and_then(|v| v.as_str()), Some("Second"));
-        assert_eq!(children[2].get("name").and_then(|v| v.as_str()), Some("Third"));
+        assert_eq!(
+            children[0].get("name").and_then(|v| v.as_str()),
+            Some("First")
+        );
+        assert_eq!(
+            children[1].get("name").and_then(|v| v.as_str()),
+            Some("Second")
+        );
+        assert_eq!(
+            children[2].get("name").and_then(|v| v.as_str()),
+            Some("Third")
+        );
     }
 }

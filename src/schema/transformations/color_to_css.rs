@@ -177,11 +177,12 @@ mod tests {
         .unwrap();
         assert!(!is_color_object(&not_color));
 
-        let incomplete_color = serde_json::from_value::<serde_json::Map<String, JsonValue>>(json!({
-            "r": 0.5,
-            "g": 0.5
-        }))
-        .unwrap();
+        let incomplete_color =
+            serde_json::from_value::<serde_json::Map<String, JsonValue>>(json!({
+                "r": 0.5,
+                "g": 0.5
+            }))
+            .unwrap();
         assert!(!is_color_object(&incomplete_color));
     }
 
@@ -413,8 +414,7 @@ mod tests {
         transform_colors_to_css(&mut tree).unwrap();
 
         assert_eq!(
-            tree["document"]["children"][0]["fills"][0]["color"]
-                .as_str(),
+            tree["document"]["children"][0]["fills"][0]["color"].as_str(),
             Some("#808080")
         );
     }

@@ -129,10 +129,7 @@ mod tests {
             remove_default_rotation(&mut tree).unwrap();
 
             // All non-zero rotations should be preserved
-            assert_eq!(
-                tree.get("rotation").unwrap().as_f64(),
-                Some(rotation_value)
-            );
+            assert_eq!(tree.get("rotation").unwrap().as_f64(), Some(rotation_value));
         }
     }
 
@@ -192,9 +189,7 @@ mod tests {
         remove_default_rotation(&mut tree).unwrap();
 
         // rotation 0.0 should be removed from transform
-        assert!(tree["fillPaints"][0]["transform"]
-            .get("rotation")
-            .is_none());
+        assert!(tree["fillPaints"][0]["transform"].get("rotation").is_none());
         assert_eq!(
             tree["fillPaints"][0]["transform"]["x"].as_f64(),
             Some(100.0)

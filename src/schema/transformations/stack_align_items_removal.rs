@@ -228,8 +228,14 @@ mod tests {
         assert_eq!(tree.get("name").unwrap().as_str(), Some("Button"));
         assert_eq!(tree.get("stackMode").unwrap().as_str(), Some("HORIZONTAL"));
         assert_eq!(tree.get("stackSpacing").unwrap().as_f64(), Some(4.0));
-        assert_eq!(tree.get("stackHorizontalPadding").unwrap().as_f64(), Some(20.0));
-        assert_eq!(tree.get("stackVerticalPadding").unwrap().as_f64(), Some(14.0));
+        assert_eq!(
+            tree.get("stackHorizontalPadding").unwrap().as_f64(),
+            Some(20.0)
+        );
+        assert_eq!(
+            tree.get("stackVerticalPadding").unwrap().as_f64(),
+            Some(14.0)
+        );
         assert!(tree.get("size").is_some());
         assert_eq!(tree.get("cornerRadius").unwrap().as_f64(), Some(12.0));
     }

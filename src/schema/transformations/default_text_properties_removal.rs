@@ -178,10 +178,7 @@ mod tests {
 
         // Non-default letterSpacing should be preserved
         assert!(tree.get("letterSpacing").is_some());
-        assert_eq!(
-            tree["letterSpacing"]["value"].as_f64(),
-            Some(5.0)
-        );
+        assert_eq!(tree["letterSpacing"]["value"].as_f64(), Some(5.0));
     }
 
     #[test]
@@ -196,10 +193,7 @@ mod tests {
 
         // Non-default lineHeight should be preserved
         assert!(tree.get("lineHeight").is_some());
-        assert_eq!(
-            tree["lineHeight"]["value"].as_f64(),
-            Some(120.0)
-        );
+        assert_eq!(tree["lineHeight"]["value"].as_f64(), Some(120.0));
     }
 
     #[test]

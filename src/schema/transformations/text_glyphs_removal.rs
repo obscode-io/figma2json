@@ -124,7 +124,12 @@ mod tests {
         let derived_text_data = tree.get("derivedTextData").unwrap();
         assert!(derived_text_data.get("glyphs").is_none());
         assert_eq!(
-            derived_text_data.get("layoutInfo").unwrap().get("baseline").unwrap().as_i64(),
+            derived_text_data
+                .get("layoutInfo")
+                .unwrap()
+                .get("baseline")
+                .unwrap()
+                .as_i64(),
             Some(12)
         );
         assert_eq!(
@@ -174,7 +179,10 @@ mod tests {
         // Check deeply nested derivedTextData
         let deep_child_data = &tree["children"][1]["children"][0]["derivedTextData"];
         assert!(deep_child_data.get("glyphs").is_none());
-        assert_eq!(deep_child_data.get("info").unwrap().as_str(), Some("preserve"));
+        assert_eq!(
+            deep_child_data.get("info").unwrap().as_str(),
+            Some("preserve")
+        );
     }
 
     #[test]
@@ -265,7 +273,10 @@ mod tests {
 
         let derived_text_data = tree.get("derivedTextData").unwrap();
         assert!(derived_text_data.get("glyphs").is_none());
-        assert_eq!(derived_text_data.get("info").unwrap().as_str(), Some("test"));
+        assert_eq!(
+            derived_text_data.get("info").unwrap().as_str(),
+            Some("test")
+        );
     }
 
     #[test]

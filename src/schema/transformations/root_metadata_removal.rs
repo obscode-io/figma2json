@@ -63,7 +63,12 @@ mod tests {
         // document should be preserved
         assert!(output.get("document").is_some());
         assert_eq!(
-            output.get("document").unwrap().get("name").unwrap().as_str(),
+            output
+                .get("document")
+                .unwrap()
+                .get("name")
+                .unwrap()
+                .as_str(),
             Some("Root")
         );
     }
@@ -145,7 +150,12 @@ mod tests {
         assert!(output.get("metadata").is_some());
         assert!(output.get("otherData").is_some());
         assert_eq!(
-            output.get("metadata").unwrap().get("custom").unwrap().as_str(),
+            output
+                .get("metadata")
+                .unwrap()
+                .get("custom")
+                .unwrap()
+                .as_str(),
             Some("field")
         );
     }
@@ -171,10 +181,7 @@ mod tests {
         assert!(output.get("fileType").is_none());
 
         // Nested version and fileType preserved
-        assert_eq!(
-            output["document"].get("version").unwrap().as_i64(),
-            Some(2)
-        );
+        assert_eq!(output["document"].get("version").unwrap().as_i64(), Some(2));
         assert_eq!(
             output["document"]["metadata"]
                 .get("fileType")

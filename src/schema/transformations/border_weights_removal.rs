@@ -296,11 +296,15 @@ mod tests {
 
         remove_border_weights(&mut tree).unwrap();
 
-        assert!(tree["children"][0].get("borderStrokeWeightsIndependent").is_none());
+        assert!(tree["children"][0]
+            .get("borderStrokeWeightsIndependent")
+            .is_none());
         assert!(tree["children"][0].get("borderTopWeight").is_none());
         assert_eq!(tree["children"][0]["name"].as_str(), Some("Child1"));
 
-        assert!(tree["children"][1].get("borderStrokeWeightsIndependent").is_none());
+        assert!(tree["children"][1]
+            .get("borderStrokeWeightsIndependent")
+            .is_none());
         assert_eq!(tree["children"][1]["name"].as_str(), Some("Child2"));
     }
 }

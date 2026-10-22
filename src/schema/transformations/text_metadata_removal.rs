@@ -326,10 +326,7 @@ mod tests {
         assert!(tree.get("fontName").is_some());
         assert_eq!(tree.get("fontSize").unwrap().as_f64(), Some(128.0));
         assert!(tree.get("textData").is_some());
-        assert_eq!(
-            tree["textData"]["characters"].as_str(),
-            Some("Hello")
-        );
+        assert_eq!(tree["textData"]["characters"].as_str(), Some("Hello"));
     }
 
     #[test]
@@ -379,7 +376,10 @@ mod tests {
 
         assert!(tree.get("fontVariantNumericFigure").is_none());
         assert!(tree.get("fontVariantNumericSpacing").is_none());
-        assert_eq!(tree.get("name").unwrap().as_str(), Some("Members without roles"));
+        assert_eq!(
+            tree.get("name").unwrap().as_str(),
+            Some("Members without roles")
+        );
         assert_eq!(tree.get("fontSize").unwrap().as_f64(), Some(14.0));
         assert!(tree.get("fontName").is_some());
     }

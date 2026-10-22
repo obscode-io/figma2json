@@ -308,11 +308,17 @@ mod tests {
         remove_redundant_padding(&mut tree).unwrap();
 
         assert!(tree.get("stackHorizontalPadding").is_some());
-        assert_eq!(tree.get("stackHorizontalPadding").unwrap().as_f64(), Some(20.0));
+        assert_eq!(
+            tree.get("stackHorizontalPadding").unwrap().as_f64(),
+            Some(20.0)
+        );
         assert!(tree.get("stackPaddingRight").is_none());
 
         assert!(tree.get("stackVerticalPadding").is_some());
-        assert_eq!(tree.get("stackVerticalPadding").unwrap().as_f64(), Some(14.0));
+        assert_eq!(
+            tree.get("stackVerticalPadding").unwrap().as_f64(),
+            Some(14.0)
+        );
         assert!(tree.get("stackPaddingBottom").is_none());
 
         // Other fields preserved

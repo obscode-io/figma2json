@@ -123,7 +123,10 @@ mod tests {
             .get("documentColorProfile")
             .is_none());
         assert_eq!(
-            tree["document"]["children"][0].get("name").unwrap().as_str(),
+            tree["document"]["children"][0]
+                .get("name")
+                .unwrap()
+                .as_str(),
             Some("Canvas")
         );
     }

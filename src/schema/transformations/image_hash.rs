@@ -79,7 +79,10 @@ fn transform_recursive(value: &mut JsonValue, base_dir: &Path) -> Result<()> {
                                         // Remove hash field
                                         obj.remove("hash");
                                         // Add filename field (with or without extension)
-                                        obj.insert("filename".to_string(), JsonValue::String(filename));
+                                        obj.insert(
+                                            "filename".to_string(),
+                                            JsonValue::String(filename),
+                                        );
                                     }
                                 }
                             }
@@ -171,14 +174,17 @@ fn detect_image_format(file_path: &Path) -> Option<String> {
     // WebP: 52 49 46 46 [4 bytes] 57 45 42 50 (RIFF....WEBP)
     if bytes_read >= 12
         && buffer[0..4] == [0x52, 0x49, 0x46, 0x46]
-        && buffer[8..12] == [0x57, 0x45, 0x42, 0x50] {
+        && buffer[8..12] == [0x57, 0x45, 0x42, 0x50]
+    {
         return Some(".webp".to_string());
     }
 
     // SVG: Check for XML/SVG markers (text-based)
     if let Ok(text) = std::str::from_utf8(&buffer[..bytes_read]) {
         let text_lower = text.to_lowercase();
-        if text_lower.contains("<svg") || (text_lower.contains("<?xml") && text_lower.contains("svg")) {
+        if text_lower.contains("<svg")
+            || (text_lower.contains("<?xml") && text_lower.contains("svg"))
+        {
             return Some(".svg".to_string());
         }
     }
@@ -207,11 +213,26 @@ mod tests {
     #[test]
     fn test_hash_to_filename_full() {
         let hash = vec![
-            JsonValue::from(96), JsonValue::from(73), JsonValue::from(161), JsonValue::from(122),
-            JsonValue::from(132), JsonValue::from(131), JsonValue::from(226), JsonValue::from(80),
-            JsonValue::from(226), JsonValue::from(150), JsonValue::from(78), JsonValue::from(100),
-            JsonValue::from(84), JsonValue::from(218), JsonValue::from(142), JsonValue::from(231),
-            JsonValue::from(161), JsonValue::from(69), JsonValue::from(66), JsonValue::from(133),
+            JsonValue::from(96),
+            JsonValue::from(73),
+            JsonValue::from(161),
+            JsonValue::from(122),
+            JsonValue::from(132),
+            JsonValue::from(131),
+            JsonValue::from(226),
+            JsonValue::from(80),
+            JsonValue::from(226),
+            JsonValue::from(150),
+            JsonValue::from(78),
+            JsonValue::from(100),
+            JsonValue::from(84),
+            JsonValue::from(218),
+            JsonValue::from(142),
+            JsonValue::from(231),
+            JsonValue::from(161),
+            JsonValue::from(69),
+            JsonValue::from(66),
+            JsonValue::from(133),
         ];
 
         let filename = hash_to_filename(&hash).unwrap();
@@ -239,7 +260,10 @@ mod tests {
 
         let image = tree.get("image").unwrap();
         assert!(image.get("hash").is_none());
-        assert_eq!(image.get("filename").unwrap().as_str(), Some("images/6049a17a"));
+        assert_eq!(
+            image.get("filename").unwrap().as_str(),
+            Some("images/6049a17a")
+        );
         assert_eq!(image.get("name").unwrap().as_str(), Some("Amazon-beast"));
     }
 
@@ -257,7 +281,10 @@ mod tests {
 
         let thumbnail = tree.get("imageThumbnail").unwrap();
         assert!(thumbnail.get("hash").is_none());
-        assert_eq!(thumbnail.get("filename").unwrap().as_str(), Some("images/6049a17a8483"));
+        assert_eq!(
+            thumbnail.get("filename").unwrap().as_str(),
+            Some("images/6049a17a8483")
+        );
         assert_eq!(thumbnail.get("name").unwrap().as_str(), Some("Test-Image"));
     }
 
@@ -292,12 +319,18 @@ mod tests {
         // Check first nested image
         let child1_image = &tree["children"][0]["image"];
         assert!(child1_image.get("hash").is_none());
-        assert_eq!(child1_image.get("filename").unwrap().as_str(), Some("images/6049"));
+        assert_eq!(
+            child1_image.get("filename").unwrap().as_str(),
+            Some("images/6049")
+        );
 
         // Check deeply nested image
         let child2_image = &tree["children"][1]["fills"][0]["image"];
         assert!(child2_image.get("hash").is_none());
-        assert_eq!(child2_image.get("filename").unwrap().as_str(), Some("images/a17a"));
+        assert_eq!(
+            child2_image.get("filename").unwrap().as_str(),
+            Some("images/a17a")
+        );
     }
 
     #[test]
@@ -326,7 +359,10 @@ mod tests {
         // Check that image object preserves all fields except hash
         let image = tree.get("image").unwrap();
         assert!(image.get("hash").is_none());
-        assert_eq!(image.get("filename").unwrap().as_str(), Some("images/6049a17a"));
+        assert_eq!(
+            image.get("filename").unwrap().as_str(),
+            Some("images/6049a17a")
+        );
         assert_eq!(image.get("name").unwrap().as_str(), Some("Amazon-beast"));
         assert_eq!(image.get("width").unwrap().as_i64(), Some(100));
         assert_eq!(image.get("height").unwrap().as_i64(), Some(200));
@@ -349,7 +385,10 @@ mod tests {
         assert!(image.get("hash").is_none());
         assert!(image.get("filename").is_none());
         assert_eq!(image.get("name").unwrap().as_str(), Some("Amazon-beast"));
-        assert_eq!(image.get("url").unwrap().as_str(), Some("https://example.com/image.png"));
+        assert_eq!(
+            image.get("url").unwrap().as_str(),
+            Some("https://example.com/image.png")
+        );
     }
 
     #[test]
@@ -375,7 +414,10 @@ mod tests {
 
         let thumbnail = tree.get("imageThumbnail").unwrap();
         assert!(thumbnail.get("hash").is_none());
-        assert_eq!(thumbnail.get("filename").unwrap().as_str(), Some("images/a17a"));
+        assert_eq!(
+            thumbnail.get("filename").unwrap().as_str(),
+            Some("images/a17a")
+        );
         assert_eq!(thumbnail.get("name").unwrap().as_str(), Some("Thumbnail"));
     }
 
@@ -420,7 +462,8 @@ mod tests {
         let test_file = temp_dir.join("images").join("6049a17a");
         fs::create_dir_all(test_file.parent().unwrap()).unwrap();
         let mut file = fs::File::create(&test_file).unwrap();
-        file.write_all(&[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]).unwrap();
+        file.write_all(&[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+            .unwrap();
         file.write_all(&[0; 100]).unwrap(); // Add some padding
         drop(file);
 
@@ -435,7 +478,10 @@ mod tests {
         transform_image_hashes(&mut tree, &temp_dir).unwrap();
 
         let image = tree.get("image").unwrap();
-        assert_eq!(image.get("filename").unwrap().as_str(), Some("images/6049a17a.png"));
+        assert_eq!(
+            image.get("filename").unwrap().as_str(),
+            Some("images/6049a17a.png")
+        );
 
         // Verify file was renamed
         assert!(temp_dir.join("images/6049a17a.png").exists());
@@ -469,7 +515,10 @@ mod tests {
         transform_image_hashes(&mut tree, &temp_dir).unwrap();
 
         let image = tree.get("image").unwrap();
-        assert_eq!(image.get("filename").unwrap().as_str(), Some("images/a17a6049.jpg"));
+        assert_eq!(
+            image.get("filename").unwrap().as_str(),
+            Some("images/a17a6049.jpg")
+        );
 
         assert!(temp_dir.join("images/a17a6049.jpg").exists());
 
@@ -500,7 +549,10 @@ mod tests {
         transform_image_hashes(&mut tree, &temp_dir).unwrap();
 
         let image = tree.get("image").unwrap();
-        assert_eq!(image.get("filename").unwrap().as_str(), Some("images/12345678.gif"));
+        assert_eq!(
+            image.get("filename").unwrap().as_str(),
+            Some("images/12345678.gif")
+        );
 
         assert!(temp_dir.join("images/12345678.gif").exists());
 
@@ -533,7 +585,10 @@ mod tests {
         transform_image_hashes(&mut tree, &temp_dir).unwrap();
 
         let image = tree.get("image").unwrap();
-        assert_eq!(image.get("filename").unwrap().as_str(), Some("images/abcdef12.webp"));
+        assert_eq!(
+            image.get("filename").unwrap().as_str(),
+            Some("images/abcdef12.webp")
+        );
 
         assert!(temp_dir.join("images/abcdef12.webp").exists());
 
@@ -550,7 +605,8 @@ mod tests {
         let test_file = temp_dir.join("images").join("87654321");
         fs::create_dir_all(test_file.parent().unwrap()).unwrap();
         let mut file = fs::File::create(&test_file).unwrap();
-        file.write_all(b"<?xml version=\"1.0\"?><svg xmlns=\"http://www.w3.org/2000/svg\">").unwrap();
+        file.write_all(b"<?xml version=\"1.0\"?><svg xmlns=\"http://www.w3.org/2000/svg\">")
+            .unwrap();
         file.write_all(&[0; 100]).unwrap();
         drop(file);
 
@@ -564,7 +620,10 @@ mod tests {
         transform_image_hashes(&mut tree, &temp_dir).unwrap();
 
         let image = tree.get("image").unwrap();
-        assert_eq!(image.get("filename").unwrap().as_str(), Some("images/87654321.svg"));
+        assert_eq!(
+            image.get("filename").unwrap().as_str(),
+            Some("images/87654321.svg")
+        );
 
         assert!(temp_dir.join("images/87654321.svg").exists());
 
@@ -596,7 +655,10 @@ mod tests {
 
         let image = tree.get("image").unwrap();
         // Unknown format should keep filename without extension
-        assert_eq!(image.get("filename").unwrap().as_str(), Some("images/deadbeef"));
+        assert_eq!(
+            image.get("filename").unwrap().as_str(),
+            Some("images/deadbeef")
+        );
 
         // Original file should still exist (not renamed)
         assert!(test_file.exists());
@@ -615,7 +677,8 @@ mod tests {
         let png_file = temp_dir.join("images").join("6049");
         fs::create_dir_all(png_file.parent().unwrap()).unwrap();
         let mut file = fs::File::create(&png_file).unwrap();
-        file.write_all(&[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]).unwrap();
+        file.write_all(&[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+            .unwrap();
         drop(file);
 
         // Create JPEG file
@@ -648,10 +711,16 @@ mod tests {
         transform_image_hashes(&mut tree, &temp_dir).unwrap();
 
         let child1_image = &tree["children"][0]["image"];
-        assert_eq!(child1_image.get("filename").unwrap().as_str(), Some("images/6049.png"));
+        assert_eq!(
+            child1_image.get("filename").unwrap().as_str(),
+            Some("images/6049.png")
+        );
 
         let child2_image = &tree["children"][1]["fills"][0]["image"];
-        assert_eq!(child2_image.get("filename").unwrap().as_str(), Some("images/a17a.jpg"));
+        assert_eq!(
+            child2_image.get("filename").unwrap().as_str(),
+            Some("images/a17a.jpg")
+        );
 
         assert!(temp_dir.join("images/6049.png").exists());
         assert!(temp_dir.join("images/a17a.jpg").exists());

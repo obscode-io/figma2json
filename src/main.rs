@@ -84,7 +84,15 @@ fn main() -> Result<()> {
         }
 
         // ZIP extraction mode
-        handle_zip_mode(&bytes, extract_dir, cli.compact, cli.verbose, cli.raw, cli.legacy, cli.keep_internal)?;
+        handle_zip_mode(
+            &bytes,
+            extract_dir,
+            cli.compact,
+            cli.verbose,
+            cli.raw,
+            cli.legacy,
+            cli.keep_internal,
+        )?;
     } else {
         // Regular .fig file mode
         if cli.verbose {
@@ -144,8 +152,8 @@ fn main() -> Result<()> {
                 eprintln!("Converting to raw JSON...");
             }
 
-            let raw_json = figma2json::convert_raw(&bytes).context("Failed to convert .fig file to raw JSON")?;
-
+            let raw_json = figma2json::convert_raw(&bytes)
+                .context("Failed to convert .fig file to raw JSON")?;
 
             // Determine raw output path
             let raw_path = match cli.output.as_ref() {
@@ -186,9 +194,15 @@ fn handle_zip_mode(
     legacy: bool,
     keep_internal: bool,
 ) -> Result<()> {
-    let options = figma2json::ConvertOptions { legacy, keep_internal };
+    let options = figma2json::ConvertOptions {
+        legacy,
+        keep_internal,
+    };
     if verbose {
-        eprintln!("ZIP file detected - extracting to: {}", extract_dir.display());
+        eprintln!(
+            "ZIP file detected - extracting to: {}",
+            extract_dir.display()
+        );
     }
 
     // Extract entire ZIP to directory
@@ -215,8 +229,7 @@ fn handle_zip_mode(
 
     // Convert each .fig file
     for fig_path in fig_files {
-        let relative_path = fig_path.strip_prefix(extract_dir)
-            .unwrap_or(&fig_path);
+        let relative_path = fig_path.strip_prefix(extract_dir).unwrap_or(&fig_path);
 
         if verbose {
             eprintln!("Converting: {}", relative_path.display());
@@ -241,14 +254,20 @@ fn handle_zip_mode(
         drop(json);
 
         if verbose {
-            eprintln!("  → {}", output_path.strip_prefix(extract_dir).unwrap_or(&output_path).display());
+            eprintln!(
+                "  → {}",
+                output_path
+                    .strip_prefix(extract_dir)
+                    .unwrap_or(&output_path)
+                    .display()
+            );
         }
 
         // If --raw flag is set, also generate raw JSON file
         if raw {
-            let raw_json = figma2json::convert_raw(&fig_bytes)
-                .with_context(|| format!("Failed to convert to raw JSON: {}", fig_path.display()))?;
-
+            let raw_json = figma2json::convert_raw(&fig_bytes).with_context(|| {
+                format!("Failed to convert to raw JSON: {}", fig_path.display())
+            })?;
 
             // Determine raw output path: same as .fig but with .raw.json extension
             let raw_output_path = fig_path.with_extension("raw.json");
@@ -257,7 +276,13 @@ fn handle_zip_mode(
             write_json_file(&raw_output_path, &raw_json, compact)?;
 
             if verbose {
-                eprintln!("  → {}", raw_output_path.strip_prefix(extract_dir).unwrap_or(&raw_output_path).display());
+                eprintln!(
+                    "  → {}",
+                    raw_output_path
+                        .strip_prefix(extract_dir)
+                        .unwrap_or(&raw_output_path)
+                        .display()
+                );
             }
         }
     }

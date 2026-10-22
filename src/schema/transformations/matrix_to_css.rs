@@ -99,9 +99,7 @@ fn has_matrix_fields(obj: &serde_json::Map<String, JsonValue>) -> bool {
 /// - scaleX: only if not ~1.0
 /// - scaleY: only if not ~1.0
 /// - skewX: only if not ~0.0
-fn extract_and_decompose_matrix(
-    obj: &serde_json::Map<String, JsonValue>,
-) -> Option<JsonValue> {
+fn extract_and_decompose_matrix(obj: &serde_json::Map<String, JsonValue>) -> Option<JsonValue> {
     // Extract matrix components
     let m00 = obj.get("m00")?.as_f64()?;
     let m01 = obj.get("m01")?.as_f64()?;
@@ -147,10 +145,10 @@ fn extract_and_decompose_matrix(
 struct CssTransform {
     x: f64,
     y: f64,
-    rotation: f64,    // in degrees
+    rotation: f64, // in degrees
     scale_x: f64,
     scale_y: f64,
-    skew_x: f64,      // in degrees
+    skew_x: f64, // in degrees
 }
 
 /// Decompose a 2D affine transformation matrix into CSS properties
@@ -318,7 +316,11 @@ mod tests {
         let transform = tree.get("transform").unwrap();
         assert!(approx_eq(transform["x"].as_f64().unwrap(), 0.0, 1e-10));
         assert!(approx_eq(transform["y"].as_f64().unwrap(), 0.0, 1e-10));
-        assert!(approx_eq(transform["rotation"].as_f64().unwrap(), 45.0, 1e-8));
+        assert!(approx_eq(
+            transform["rotation"].as_f64().unwrap(),
+            45.0,
+            1e-8
+        ));
         // Default scale and skew should not be present
         assert!(transform.get("scaleX").is_none());
         assert!(transform.get("scaleY").is_none());
@@ -344,7 +346,11 @@ mod tests {
         let transform = tree.get("transform").unwrap();
         assert!(approx_eq(transform["x"].as_f64().unwrap(), 0.0, 1e-10));
         assert!(approx_eq(transform["y"].as_f64().unwrap(), 0.0, 1e-10));
-        assert!(approx_eq(transform["rotation"].as_f64().unwrap(), 90.0, 1e-8));
+        assert!(approx_eq(
+            transform["rotation"].as_f64().unwrap(),
+            90.0,
+            1e-8
+        ));
         // Default scale and skew should not be present
         assert!(transform.get("scaleX").is_none());
         assert!(transform.get("scaleY").is_none());
@@ -376,7 +382,11 @@ mod tests {
         let transform = tree.get("transform").unwrap();
         assert!(approx_eq(transform["x"].as_f64().unwrap(), 100.0, 1e-10));
         assert!(approx_eq(transform["y"].as_f64().unwrap(), 50.0, 1e-10));
-        assert!(approx_eq(transform["rotation"].as_f64().unwrap(), 30.0, 1e-8));
+        assert!(approx_eq(
+            transform["rotation"].as_f64().unwrap(),
+            30.0,
+            1e-8
+        ));
         assert!(approx_eq(transform["scaleX"].as_f64().unwrap(), 2.0, 1e-10));
         assert!(approx_eq(transform["scaleY"].as_f64().unwrap(), 3.0, 1e-10));
         // Default skew should not be present
@@ -414,8 +424,16 @@ mod tests {
 
         // Check root transform (only translation, should only have x and y)
         let root_transform = tree.get("transform").unwrap();
-        assert!(approx_eq(root_transform["x"].as_f64().unwrap(), 10.0, 1e-10));
-        assert!(approx_eq(root_transform["y"].as_f64().unwrap(), 20.0, 1e-10));
+        assert!(approx_eq(
+            root_transform["x"].as_f64().unwrap(),
+            10.0,
+            1e-10
+        ));
+        assert!(approx_eq(
+            root_transform["y"].as_f64().unwrap(),
+            20.0,
+            1e-10
+        ));
         assert!(root_transform.get("rotation").is_none());
         assert!(root_transform.get("scaleX").is_none());
         assert!(root_transform.get("scaleY").is_none());
@@ -423,10 +441,26 @@ mod tests {
 
         // Check child transform (has scale, should have x, y, scaleX, scaleY)
         let child_transform = &tree["children"][0]["transform"];
-        assert!(approx_eq(child_transform["x"].as_f64().unwrap(), 5.0, 1e-10));
-        assert!(approx_eq(child_transform["y"].as_f64().unwrap(), 10.0, 1e-10));
-        assert!(approx_eq(child_transform["scaleX"].as_f64().unwrap(), 2.0, 1e-10));
-        assert!(approx_eq(child_transform["scaleY"].as_f64().unwrap(), 2.0, 1e-10));
+        assert!(approx_eq(
+            child_transform["x"].as_f64().unwrap(),
+            5.0,
+            1e-10
+        ));
+        assert!(approx_eq(
+            child_transform["y"].as_f64().unwrap(),
+            10.0,
+            1e-10
+        ));
+        assert!(approx_eq(
+            child_transform["scaleX"].as_f64().unwrap(),
+            2.0,
+            1e-10
+        ));
+        assert!(approx_eq(
+            child_transform["scaleY"].as_f64().unwrap(),
+            2.0,
+            1e-10
+        ));
         assert!(child_transform.get("rotation").is_none());
         assert!(child_transform.get("skewX").is_none());
     }
@@ -485,8 +519,16 @@ mod tests {
         assert!(approx_eq(transform["x"].as_f64().unwrap(), 0.0, 1e-10));
         assert!(approx_eq(transform["y"].as_f64().unwrap(), 0.0, 1e-10));
         // scaleX should be 1.0 (magnitude), rotation should be 180 degrees
-        assert!(approx_eq(transform["rotation"].as_f64().unwrap(), 180.0, 1e-8));
-        assert!(approx_eq(transform["scaleY"].as_f64().unwrap(), -1.0, 1e-10));
+        assert!(approx_eq(
+            transform["rotation"].as_f64().unwrap(),
+            180.0,
+            1e-8
+        ));
+        assert!(approx_eq(
+            transform["scaleY"].as_f64().unwrap(),
+            -1.0,
+            1e-10
+        ));
         // scaleX is 1.0 (default) so should not be present
         assert!(transform.get("scaleX").is_none());
         assert!(transform.get("skewX").is_none());

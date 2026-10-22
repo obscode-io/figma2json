@@ -81,7 +81,7 @@ mod tests {
         // Check that bytes field is now a base64 string
         let bytes_value = blob.get("bytes").unwrap();
         assert!(bytes_value.is_string());
-        assert_eq!(bytes_value.as_str().unwrap(), "SGVsbG8=");  // "Hello" in base64
+        assert_eq!(bytes_value.as_str().unwrap(), "SGVsbG8="); // "Hello" in base64
     }
 
     #[test]
@@ -123,7 +123,13 @@ mod tests {
         let blobs_array = processed.as_array().unwrap();
 
         assert_eq!(blobs_array.len(), 2);
-        assert_eq!(blobs_array[0].get("bytes").unwrap().as_str().unwrap(), "QUJD");  // "ABC" in base64
-        assert_eq!(blobs_array[1].get("bytes").unwrap().as_str().unwrap(), "WFla");  // "XYZ" in base64
+        assert_eq!(
+            blobs_array[0].get("bytes").unwrap().as_str().unwrap(),
+            "QUJD"
+        ); // "ABC" in base64
+        assert_eq!(
+            blobs_array[1].get("bytes").unwrap().as_str().unwrap(),
+            "WFla"
+        ); // "XYZ" in base64
     }
 }

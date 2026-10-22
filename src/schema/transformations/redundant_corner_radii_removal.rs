@@ -184,10 +184,14 @@ mod tests {
         let children = tree.get("children").unwrap().as_array().unwrap();
         // Child1 has cornerRadius, so individual radii should be removed
         assert!(children[0].get("rectangleTopLeftCornerRadius").is_none());
-        assert!(children[0].get("rectangleBottomRightCornerRadius").is_none());
+        assert!(children[0]
+            .get("rectangleBottomRightCornerRadius")
+            .is_none());
         // Child2 has no cornerRadius, so individual radii should be preserved
         assert!(children[1].get("rectangleTopLeftCornerRadius").is_some());
-        assert!(children[1].get("rectangleBottomRightCornerRadius").is_some());
+        assert!(children[1]
+            .get("rectangleBottomRightCornerRadius")
+            .is_some());
     }
 
     #[test]

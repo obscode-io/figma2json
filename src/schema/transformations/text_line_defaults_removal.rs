@@ -69,9 +69,7 @@ fn transform_recursive(value: &mut JsonValue) -> Result<()> {
                     // Only remove the lines array if it has elements and all of them are empty
                     let all_empty = !lines_array.is_empty()
                         && lines_array.iter().all(|line| {
-                            line.as_object()
-                                .map(|obj| obj.is_empty())
-                                .unwrap_or(false)
+                            line.as_object().map(|obj| obj.is_empty()).unwrap_or(false)
                         });
 
                     // If all lines are empty, remove the entire "lines" array
@@ -175,10 +173,7 @@ mod tests {
 
         // Entire lines array should be removed
         assert!(tree["textData"].get("lines").is_none());
-        assert_eq!(
-            tree["textData"]["characters"].as_str(),
-            Some("Hello")
-        );
+        assert_eq!(tree["textData"]["characters"].as_str(), Some("Hello"));
     }
 
     #[test]
@@ -399,10 +394,7 @@ mod tests {
         remove_default_text_line_properties(&mut tree).unwrap();
 
         // Tree without lines should be unchanged
-        assert_eq!(
-            tree["textData"]["characters"].as_str(),
-            Some("Hello")
-        );
+        assert_eq!(tree["textData"]["characters"].as_str(), Some("Hello"));
     }
 
     #[test]

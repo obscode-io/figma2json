@@ -313,10 +313,22 @@ mod tests {
         simplify_text_properties(&mut tree).unwrap();
 
         let children = tree.get("children").unwrap().as_array().unwrap();
-        assert_eq!(children[0].get("letterSpacing").unwrap().as_str(), Some("-1%"));
-        assert_eq!(children[1].get("lineHeight").unwrap().as_str(), Some("16px"));
-        assert_eq!(children[2].get("letterSpacing").unwrap().as_str(), Some("0%"));
-        assert_eq!(children[2].get("lineHeight").unwrap().as_str(), Some("24px"));
+        assert_eq!(
+            children[0].get("letterSpacing").unwrap().as_str(),
+            Some("-1%")
+        );
+        assert_eq!(
+            children[1].get("lineHeight").unwrap().as_str(),
+            Some("16px")
+        );
+        assert_eq!(
+            children[2].get("letterSpacing").unwrap().as_str(),
+            Some("0%")
+        );
+        assert_eq!(
+            children[2].get("lineHeight").unwrap().as_str(),
+            Some("24px")
+        );
     }
 
     #[test]
@@ -386,7 +398,10 @@ mod tests {
         simplify_text_properties(&mut tree).unwrap();
 
         // letterSpacing and lineHeight should be unchanged (not matching structure)
-        assert_eq!(tree.get("letterSpacing").unwrap().as_str(), Some("already-simple"));
+        assert_eq!(
+            tree.get("letterSpacing").unwrap().as_str(),
+            Some("already-simple")
+        );
         assert_eq!(tree.get("lineHeight").unwrap().as_f64(), Some(1.5));
 
         // otherProperty should be unchanged (not letterSpacing or lineHeight)
@@ -466,7 +481,10 @@ mod tests {
         assert_eq!(tree.get("letterSpacing").unwrap().as_str(), Some("-1%"));
         assert_eq!(tree.get("lineHeight").unwrap().as_str(), Some("20px"));
         assert_eq!(tree.get("fontSize").unwrap().as_f64(), Some(14.0));
-        assert_eq!(tree.get("name").unwrap().as_str(), Some("Members without roles"));
+        assert_eq!(
+            tree.get("name").unwrap().as_str(),
+            Some("Members without roles")
+        );
         assert!(tree.get("fontName").is_some());
         assert!(tree.get("size").is_some());
     }

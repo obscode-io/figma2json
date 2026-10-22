@@ -121,7 +121,13 @@ mod tests {
         assert!(tree.get("empty").is_none());
         assert!(tree.get("data").is_some());
         assert_eq!(
-            tree.get("data").unwrap().as_object().unwrap().get("key").unwrap().as_str(),
+            tree.get("data")
+                .unwrap()
+                .as_object()
+                .unwrap()
+                .get("key")
+                .unwrap()
+                .as_str(),
             Some("value")
         );
     }

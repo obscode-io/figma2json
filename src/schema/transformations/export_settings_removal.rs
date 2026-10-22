@@ -190,7 +190,9 @@ mod tests {
         remove_export_settings(&mut tree).unwrap();
 
         assert!(tree["document"].get("exportSettings").is_none());
-        assert!(tree["document"]["children"][0].get("exportSettings").is_none());
+        assert!(tree["document"]["children"][0]
+            .get("exportSettings")
+            .is_none());
         assert!(tree["document"]["children"][0]["children"][0]
             .get("exportSettings")
             .is_none());

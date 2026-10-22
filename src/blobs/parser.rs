@@ -39,9 +39,9 @@ fn extract_blob_bytes(blob: &JsonValue) -> Result<Vec<u8>> {
     // Handle base64 string
     if let Some(base64_str) = bytes_value.as_str() {
         use base64::{engine::general_purpose, Engine as _};
-        return general_purpose::STANDARD
-            .decode(base64_str)
-            .map_err(|e| crate::error::FigError::ZipError(format!("Failed to decode base64: {}", e)));
+        return general_purpose::STANDARD.decode(base64_str).map_err(|e| {
+            crate::error::FigError::ZipError(format!("Failed to decode base64: {}", e))
+        });
     }
 
     // Handle array of numbers

@@ -64,7 +64,12 @@ mod tests {
         assert_eq!(output.get("fileType").unwrap().as_str(), Some("figma"));
         assert!(output.get("document").is_some());
         assert_eq!(
-            output.get("document").unwrap().get("name").unwrap().as_str(),
+            output
+                .get("document")
+                .unwrap()
+                .get("name")
+                .unwrap()
+                .as_str(),
             Some("Root")
         );
     }
@@ -115,7 +120,12 @@ mod tests {
         assert!(output.get("document").is_some());
         assert!(output.get("metadata").is_some());
         assert_eq!(
-            output.get("metadata").unwrap().get("custom").unwrap().as_str(),
+            output
+                .get("metadata")
+                .unwrap()
+                .get("custom")
+                .unwrap()
+                .as_str(),
             Some("field")
         );
     }

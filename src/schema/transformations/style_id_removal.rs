@@ -214,7 +214,9 @@ mod tests {
         remove_style_ids(&mut tree).unwrap();
 
         assert!(tree["document"].get("styleIdForFill").is_none());
-        assert!(tree["document"]["children"][0].get("styleIdForText").is_none());
+        assert!(tree["document"]["children"][0]
+            .get("styleIdForText")
+            .is_none());
         assert!(tree["document"]["children"][0]["children"][0]
             .get("styleIdForStrokeFill")
             .is_none());

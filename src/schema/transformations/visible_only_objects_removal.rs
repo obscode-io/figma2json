@@ -70,9 +70,7 @@ fn transform_recursive(value: &mut JsonValue) {
 /// Check if a JSON value is an object with only a "visible" key
 fn is_visible_only_object(value: &JsonValue) -> bool {
     match value {
-        JsonValue::Object(map) => {
-            map.len() == 1 && map.contains_key("visible")
-        }
+        JsonValue::Object(map) => map.len() == 1 && map.contains_key("visible"),
         _ => false,
     }
 }
@@ -258,7 +256,9 @@ mod tests {
         let overrides = tree["symbolData"]["symbolOverrides"].as_array().unwrap();
         assert_eq!(overrides.len(), 4);
         // Verify the visible-only object was removed
-        assert!(overrides.iter().all(|o| o.get("textData").is_some() || o.get("overrideLevel").is_some()));
+        assert!(overrides
+            .iter()
+            .all(|o| o.get("textData").is_some() || o.get("overrideLevel").is_some()));
     }
 
     #[test]
@@ -277,7 +277,9 @@ mod tests {
 
         remove_visible_only_objects(&mut tree).unwrap();
 
-        assert!(tree["level1"]["level2"]["level3"].get("visibleOnly").is_none());
+        assert!(tree["level1"]["level2"]["level3"]
+            .get("visibleOnly")
+            .is_none());
         assert_eq!(
             tree["level1"]["level2"]["level3"]["data"].as_str(),
             Some("value")

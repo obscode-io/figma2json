@@ -233,7 +233,6 @@ pub fn convert_with_options(
     // This converts "color: {r, g, b, a}" to "color: #rrggbb" or "color: #rrggbbaa"
     schema::transform_colors_to_css(&mut document)?;
 
-
     // 13. Simplify enum objects to simple strings
     // This converts {"__enum__": "NodeType", "value": "FRAME"} to "FRAME"
     schema::simplify_enums(&mut document)?;
@@ -258,7 +257,6 @@ pub fn convert_with_options(
 
     // 17. Remove phase fields (Figma internal state)
     schema::remove_phase_fields(&mut document)?;
-
 
     // 18. Remove geometry fields (detailed path commands). Also run before blob
     // substitution above (to save memory); this second run catches geometry inside

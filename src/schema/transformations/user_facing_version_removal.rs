@@ -274,6 +274,9 @@ mod tests {
         assert!(tree["children"][2].get("userFacingVersion").is_none());
         assert_eq!(tree["children"][0]["name"].as_str(), Some("WithVersion"));
         assert_eq!(tree["children"][1]["name"].as_str(), Some("WithoutVersion"));
-        assert_eq!(tree["children"][2]["name"].as_str(), Some("AlsoWithVersion"));
+        assert_eq!(
+            tree["children"][2]["name"].as_str(),
+            Some("AlsoWithVersion")
+        );
     }
 }

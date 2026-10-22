@@ -1,8 +1,8 @@
 use crate::error::{FigError, Result};
 use base64::{engine::general_purpose, Engine as _};
 use kiwi_schema::{
-    ByteBuffer, DefKind, Field, Schema, Value, TYPE_BOOL, TYPE_BYTE, TYPE_FLOAT, TYPE_INT, TYPE_INT64,
-    TYPE_STRING, TYPE_UINT, TYPE_UINT64,
+    ByteBuffer, DefKind, Field, Schema, Value, TYPE_BOOL, TYPE_BYTE, TYPE_FLOAT, TYPE_INT,
+    TYPE_INT64, TYPE_STRING, TYPE_UINT, TYPE_UINT64,
 };
 use serde_json::Value as JsonValue;
 
@@ -69,7 +69,11 @@ fn float_to_json(f: f32) -> JsonValue {
 }
 
 /// Decode one value of `type_id` (mirrors `kiwi_schema::Value::decode_bb`).
-fn decode_type(schema: &Schema, type_id: i32, bb: &mut ByteBuffer) -> std::result::Result<JsonValue, ()> {
+fn decode_type(
+    schema: &Schema,
+    type_id: i32,
+    bb: &mut ByteBuffer,
+) -> std::result::Result<JsonValue, ()> {
     Ok(match type_id {
         TYPE_BOOL => JsonValue::Bool(bb.read_bool()?),
         TYPE_BYTE => JsonValue::Number(bb.read_byte()?.into()),
@@ -83,10 +87,16 @@ fn decode_type(schema: &Schema, type_id: i32, bb: &mut ByteBuffer) -> std::resul
             let def = schema.defs.get(type_id as usize).ok_or(())?;
             match def.kind {
                 DefKind::Enum => {
-                    let index = def.field_value_to_index.get(&bb.read_var_uint()?).ok_or(())?;
+                    let index = def
+                        .field_value_to_index
+                        .get(&bb.read_var_uint()?)
+                        .ok_or(())?;
                     let mut map = serde_json::Map::new();
                     map.insert("__enum__".to_string(), JsonValue::String(def.name.clone()));
-                    map.insert("value".to_string(), JsonValue::String(def.fields[*index].name.clone()));
+                    map.insert(
+                        "value".to_string(),
+                        JsonValue::String(def.fields[*index].name.clone()),
+                    );
                     JsonValue::Object(map)
                 }
                 DefKind::Struct => {
@@ -115,7 +125,11 @@ fn decode_type(schema: &Schema, type_id: i32, bb: &mut ByteBuffer) -> std::resul
 }
 
 /// Decode a field, handling arrays (mirrors `kiwi_schema::Value::decode_field_bb`).
-fn decode_field(schema: &Schema, field: &Field, bb: &mut ByteBuffer) -> std::result::Result<JsonValue, ()> {
+fn decode_field(
+    schema: &Schema,
+    field: &Field,
+    bb: &mut ByteBuffer,
+) -> std::result::Result<JsonValue, ()> {
     if !field.is_array {
         return decode_type(schema, field.type_id, bb);
     }
@@ -125,7 +139,12 @@ fn decode_field(schema: &Schema, field: &Field, bb: &mut ByteBuffer) -> std::res
         if field.name == "bytes" {
             return Ok(JsonValue::String(general_purpose::STANDARD.encode(bytes)));
         }
-        return Ok(JsonValue::Array(bytes.iter().map(|b| JsonValue::Number((*b).into())).collect()));
+        return Ok(JsonValue::Array(
+            bytes
+                .iter()
+                .map(|b| JsonValue::Number((*b).into()))
+                .collect(),
+        ));
     }
     // Cap the pre-allocation: `len` comes from the file and may be corrupt.
     let mut array = Vec::with_capacity(len.min(1 << 16));
@@ -157,14 +176,18 @@ fn kiwi_value_to_json(value: &Value) -> JsonValue {
         Value::String(s) => JsonValue::String(s.clone()),
         Value::Int64(n) => JsonValue::Number((*n).into()),
         Value::UInt64(n) => JsonValue::Number((*n).into()),
-        Value::Array(arr) => {
-            JsonValue::Array(arr.iter().map(kiwi_value_to_json).collect())
-        }
+        Value::Array(arr) => JsonValue::Array(arr.iter().map(kiwi_value_to_json).collect()),
         Value::Enum(enum_name, variant_name) => {
             // Represent enum as object with type field
             let mut map = serde_json::Map::new();
-            map.insert("__enum__".to_string(), JsonValue::String(enum_name.to_string()));
-            map.insert("value".to_string(), JsonValue::String(variant_name.to_string()));
+            map.insert(
+                "__enum__".to_string(),
+                JsonValue::String(enum_name.to_string()),
+            );
+            map.insert(
+                "value".to_string(),
+                JsonValue::String(variant_name.to_string()),
+            );
             JsonValue::Object(map)
         }
         Value::Object(_type_name, fields) => {
@@ -208,11 +231,7 @@ mod tests {
 
     #[test]
     fn test_kiwi_value_to_json_array() {
-        let value = Value::Array(vec![
-            Value::Int(1),
-            Value::Int(2),
-            Value::Int(3),
-        ]);
+        let value = Value::Array(vec![Value::Int(1), Value::Int(2), Value::Int(3)]);
         let json = kiwi_value_to_json(&value);
         assert_eq!(
             json,

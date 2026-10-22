@@ -168,9 +168,11 @@ mod tests {
         assert!(tree["symbolData"]["symbolOverrides"][0]
             .get("guidPath")
             .is_none());
-        assert!(tree["symbolData"]["symbolOverrides"][0]["properties"]["nested"]
-            .get("guidPath")
-            .is_none());
+        assert!(
+            tree["symbolData"]["symbolOverrides"][0]["properties"]["nested"]
+                .get("guidPath")
+                .is_none()
+        );
     }
 
     #[test]
@@ -238,7 +240,10 @@ mod tests {
 
         assert!(tree["derivedSymbolData"][0].get("guidPath").is_none());
         assert!(tree["derivedSymbolData"][1].get("guidPath").is_none());
-        assert_eq!(tree["derivedSymbolData"][0]["size"]["x"].as_f64(), Some(100.0));
+        assert_eq!(
+            tree["derivedSymbolData"][0]["size"]["x"].as_f64(),
+            Some(100.0)
+        );
         assert_eq!(
             tree["derivedSymbolData"][1]["transform"]["x"].as_f64(),
             Some(10.0)

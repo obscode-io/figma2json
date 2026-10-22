@@ -318,10 +318,7 @@ mod tests {
         simplify_enums(&mut tree).unwrap();
 
         // All enum types simplified
-        assert_eq!(
-            tree.get("textAlignVertical").unwrap().as_str(),
-            Some("TOP")
-        );
+        assert_eq!(tree.get("textAlignVertical").unwrap().as_str(), Some("TOP"));
         assert_eq!(
             tree.get("textAutoResize").unwrap().as_str(),
             Some("WIDTH_AND_HEIGHT")

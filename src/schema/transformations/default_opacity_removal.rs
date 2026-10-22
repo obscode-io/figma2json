@@ -126,10 +126,7 @@ mod tests {
             remove_default_opacity(&mut tree).unwrap();
 
             // All non-1.0 opacities should be preserved
-            assert_eq!(
-                tree.get("opacity").unwrap().as_f64(),
-                Some(opacity_value)
-            );
+            assert_eq!(tree.get("opacity").unwrap().as_f64(), Some(opacity_value));
         }
     }
 

@@ -265,7 +265,10 @@ mod tests {
         let children = tree.get("children").unwrap().as_array().unwrap();
         let child1_fills = children[0].get("fillPaints").unwrap().as_array().unwrap();
         assert_eq!(child1_fills.len(), 1);
-        assert_eq!(child1_fills[0].get("color").unwrap().as_str(), Some("#000000"));
+        assert_eq!(
+            child1_fills[0].get("color").unwrap().as_str(),
+            Some("#000000")
+        );
 
         let child2_strokes = children[1].get("strokePaints").unwrap().as_array().unwrap();
         assert_eq!(child2_strokes.len(), 0);

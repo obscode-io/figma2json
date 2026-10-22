@@ -97,10 +97,7 @@ mod tests {
         remove_default_uniform_scale_factor(&mut tree).unwrap();
 
         // Non-default scale factors should be preserved
-        assert_eq!(
-            tree.get("uniformScaleFactor").unwrap().as_f64(),
-            Some(2.5)
-        );
+        assert_eq!(tree.get("uniformScaleFactor").unwrap().as_f64(), Some(2.5));
         assert_eq!(tree.get("name").unwrap().as_str(), Some("Shape"));
     }
 
