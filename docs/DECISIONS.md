@@ -90,7 +90,8 @@ value Figma stores; a missing side means 0.
 
 ## 8. MSRV 1.88
 
-**Context.** The locked dependency tree (`zip 0.6` -> `time 0.3.55`) declares `rust-version = "1.88.0"`.
+**Context.** Originally the locked tree (`zip 0.6` -> `time 0.3.55`) required 1.88. Since `zip` is built
+without default features and zstd uses `ruzstd`, the newest dependency floor is `ruzstd 0.9` (1.87).
 
 **Decision.** `rust-version = "1.88"` in `Cargo.toml`; CI tests on stable and 1.88 with `--locked`.
 
@@ -129,6 +130,10 @@ so the `.fig` file never leaves the user's machine. It can be served as static f
 main tool for scripting and large files. The app lives in a `web/` crate and is documented in
 `docs/WEB.md`.
 
+**Implementation.** The core gained `convert_in_memory`, `extract_zip_to_memory`, `image_extension` and
+`transform_image_hashes_with`; `clap`/`anyhow` moved behind a default `cli` feature; zstd decoding moved
+to pure-Rust `ruzstd` so one decoder serves native and wasm32 without a C toolchain.
+
 **Consequences.** The library must stay usable from WASM: the core conversion must not depend on
-threads or the file system beyond what the browser provides. Today `transform_image_hashes` renames files
-on disk relative to `base_dir`, so image handling in the browser needs a separate path.
+threads or the file system beyond what the browser provides. `transform_image_hashes` (disk, renames files) is
+now a wrapper over the closure-based `transform_image_hashes_with`, which the browser path uses.

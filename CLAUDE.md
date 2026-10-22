@@ -40,7 +40,8 @@ RUSTDOCFLAGS=-D warnings cargo doc --no-deps --locked
 ```
 
 CI also runs `cargo build --locked` and `cargo test --locked` on toolchain 1.88. The MSRV is 1.88 because
-the locked dependency tree needs it: `zip 0.6` pulls in `time 0.3.55`, whose `rust-version` is 1.88.
+it is the declared `rust-version` of both crates and is tested in CI; the newest dependency floor is
+`ruzstd 0.9` (1.87).
 Always pass `--locked`; do not update `Cargo.lock` casually (it can raise the MSRV).
 `Cargo.toml` sets `unsafe_code = "forbid"` and Clippy `all = deny`.
 
@@ -113,4 +114,9 @@ Details: `docs/ARCHITECTURE.md`, `docs/PIPELINE.md`.
 
 ## Web app
 
-The `web/` crate (WASM browser app) is documented in docs/WEB.md.
+The `web/` crate is the WebAssembly browser app (workspace member; the root package stays the library + CLI).
+It uses `convert_in_memory` (no filesystem) and is built with `web/build.sh` (wasm-bindgen pinned to
+0.2.100). The library's `cli` feature (default) gates `clap`/`anyhow`; keep the core free of filesystem
+and C dependencies so it still builds for `wasm32-unknown-unknown`. CI also runs
+`cargo clippy -p figma2json-web --target wasm32-unknown-unknown --locked -- -D warnings` and `web/build.sh`;
+local workspace checks use `--workspace`. Details: docs/WEB.md.

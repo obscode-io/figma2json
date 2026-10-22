@@ -61,12 +61,12 @@ The stage tables and their `When` conditions are listed pass by pass in [PIPELIN
 | Module | File(s) | Responsibility |
 | --- | --- | --- |
 | crate root | `src/lib.rs` | Module declarations, re-exports, crate docs. `#![forbid(unsafe_code)]`. |
-| `pipeline` (private) | `src/pipeline.rs` | `convert`, `convert_with_options`, `convert_raw`, `ConvertOptions`; the `decode` phase; the `When` enum; the four `const` stage tables; `transform`; pipeline tests. |
+| `pipeline` (private) | `src/pipeline.rs` | `convert`, `convert_with_options`, `convert_raw`, `convert_in_memory` (+ `InMemoryConversion`, `OutputFile`), `ConvertOptions`; the `decode` phase; the `When` enum; the four `const` stage tables; `transform`; pipeline tests. |
 | `error` | `src/error.rs` | `FigError` (`thiserror`, `#[non_exhaustive]`) and `Result<T>`. |
 | `types` | `src/types.rs` | `FileType` (`Figma` / `FigJam`, `as_str()` gives `"figma"` / `"figjam"`) and `ParsedFile { version, chunks }` with `schema_chunk()`, `data_chunk()`, `image_chunks()`. |
 | `parser::header` | `src/parser/header.rs` | `detect_file_type` (8-byte magic), `is_zip_container` (`PK` prefix). |
 | `parser::chunks` | `src/parser/chunks.rs` | `extract_from_zip` (returns the `canvas.fig` entry), `extract_zip_to_directory` (whole archive; entries escaping the target via absolute paths or `..` are skipped through `enclosed_name`), `extract_chunks` (version + length-prefixed chunks; a trailing partial length header is ignored; at least 2 chunks required). |
-| `parser::compression` | `src/parser/compression.rs` | `is_already_compressed` (PNG/JPEG magic), `decompress_chunk` (raw DEFLATE first, then zstd). |
+| `parser::compression` | `src/parser/compression.rs` | `is_already_compressed` (PNG/JPEG magic), `decompress_chunk` (raw DEFLATE via `flate2` first, then Zstandard via pure-Rust `ruzstd`). |
 | `schema::decoder` | `src/schema/decoder.rs` | `decode_fig_to_json`: decodes the Kiwi schema, finds the root definition named `Message` that has both `nodeChanges` and `blobs` fields, and decodes the data chunk straight to `serde_json::Value`. Floats that are NaN/infinite become `null`. Byte arrays in a field named `bytes` become base64 strings; other byte arrays become number arrays. A private `kiwi_value_to_json` is kept under `#[allow(dead_code)]`. |
 | `schema::tree` | `src/schema/tree.rs` | `build_tree`: indexes nodes by `"sessionID:localID"`, groups children by `parentIndex.guid`, sorts siblings by `parentIndex.position` (string order), removes `parentIndex`, and builds the tree from `0:0`. Nodes not reachable from `0:0` are dropped. |
 | `schema::transformations` | `src/schema/transformations/*.rs` | One file per pass (55 files) plus `walk.rs` (`for_each_object_mut`, crate-private). |
@@ -81,6 +81,9 @@ Crate root (`src/lib.rs`):
 - `convert(bytes, base_dir) -> Result<Value>`: `convert_with_options` with `ConvertOptions::default()`.
 - `convert_with_options(bytes, base_dir, &ConvertOptions) -> Result<Value>`.
 - `convert_raw(bytes) -> Result<Value>`: decode + blob substitution, no passes.
+- `convert_in_memory(bytes, &ConvertOptions) -> Result<InMemoryConversion>`: the full pipeline with no
+  filesystem access (ZIP read in memory, image extensions detected from bytes); returns the JSON plus the
+  other archive entries. Used by the web app; see [WEB.md](WEB.md).
 - `ConvertOptions { legacy: bool, keep_internal: bool }` (both `false` by default).
 - `FigError`, `Result`, `FileType`, `ParsedFile`.
 - Public modules: `blobs`, `error`, `parser`, `schema`, `types`. `pipeline` is private.

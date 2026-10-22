@@ -2,8 +2,9 @@
 
 ## Setup
 
-- Rust 1.88 or newer (`rustup`). 1.88 is the MSRV, tested in CI. The locked dependency tree needs it:
-  `zip 0.6` depends on `time 0.3.55`, which declares `rust-version = "1.88.0"`.
+- Rust 1.88 or newer (`rustup`). 1.88 is the MSRV, tested in CI. It is the declared
+  `rust-version`; the newest dependency floor is `ruzstd 0.9` (1.87). For the web app also install the
+  `wasm32-unknown-unknown` target and `wasm-bindgen-cli` 0.2.100 (see [WEB.md](WEB.md)).
 - Components: `rustfmt`, `clippy`.
 - Python 3 for `tools/` (standard library only).
 
