@@ -180,9 +180,9 @@ tools/                   Python helpers that split canvas.json into per-screen f
 
 ```bash
 cargo fmt --all --check
-cargo clippy --all-targets --all-features -- -D warnings
-cargo test
-cargo doc --no-deps
+cargo clippy --all-targets --all-features --locked -- -D warnings
+cargo test --locked
+RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --locked
 ```
 
 CI runs the same checks on every push and pull request, plus the test suite on the minimum supported Rust
