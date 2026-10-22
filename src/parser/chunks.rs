@@ -102,7 +102,7 @@ pub fn extract_zip_to_directory(bytes: &[u8], target_dir: &Path) -> Result<()> {
 
 /// Extract chunks from a .fig file (version format)
 ///
-/// Parses the version format used by Evan Wallace's approach:
+/// Parses the versioned `fig-kiwi` container format:
 /// ```text
 /// [8 bytes] Magic header: "fig-kiwi" or "fig-jam."
 /// [4 bytes] Version (uint32, little-endian)

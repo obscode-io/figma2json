@@ -38,7 +38,7 @@ struct Cli {
     #[arg(long)]
     raw: bool,
 
-    /// Original fig2json (pre-0.4) output: drop node ids/types, variable and style names,
+    /// Pre-0.4 output: drop node ids/types, variable and style names,
     /// the root `variables`/`styles`, auto-layout alignment/sizing, constraints,
     /// scroll behavior, layout grids and override paths
     #[arg(long)]

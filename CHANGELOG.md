@@ -22,10 +22,7 @@
 - CI runs on every push and pull request: `cargo fmt --check`, Clippy with `-D warnings`, tests on stable and on
   the 1.88 MSRV, and `cargo doc` with warnings denied. All jobs use `--locked` and `Swatinem/rust-cache`.
 
-## 0.4.0 (figma2json)
-
-Renamed from `fig2json` (fork of https://github.com/kreako/fig2json): the package, binary and library are now
-`figma2json` (`use figma2json::...`). Versions up to 0.3.0 are the upstream `fig2json`.
+## 0.4.0
 
 ### Added
 - Node `id` (Figma node id) and `type` on every node; public type names (`COMPONENT`, `COMPONENT_SET` for state-group frames, `RECTANGLE`).
