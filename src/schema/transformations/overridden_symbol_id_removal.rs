@@ -1,5 +1,5 @@
 use crate::error::Result;
-use serde_json::Value as JsonValue;
+use serde_json::{Map, Value as JsonValue};
 
 /// Remove standalone overriddenSymbolID objects from arrays
 ///
@@ -47,67 +47,38 @@ use serde_json::Value as JsonValue;
 /// // First object removed, second preserved (has textData)
 /// ```
 pub fn remove_overridden_symbol_id(tree: &mut JsonValue) -> Result<()> {
-    transform_recursive(tree)
+    remove_standalone(tree);
+    Ok(())
 }
 
 /// Check if an object contains ONLY an overriddenSymbolID field
 /// with only localID and sessionID
-fn is_standalone_overridden_symbol_id(obj: &serde_json::Map<String, JsonValue>) -> bool {
-    // Must have exactly 1 key
+fn is_standalone_overridden_symbol_id(obj: &Map<String, JsonValue>) -> bool {
     if obj.len() != 1 {
         return false;
     }
-
-    // That key must be "overriddenSymbolID"
-    if let Some(overridden_symbol_id) = obj.get("overriddenSymbolID") {
-        // The value must be an object
-        if let Some(inner_obj) = overridden_symbol_id.as_object() {
-            // That object must contain only "localID" and "sessionID"
-            if inner_obj.len() != 2 {
-                return false;
-            }
-            return inner_obj.contains_key("localID") && inner_obj.contains_key("sessionID");
-        }
-    }
-
-    false
+    obj.get("overriddenSymbolID")
+        .and_then(JsonValue::as_object)
+        .is_some_and(|inner| {
+            inner.len() == 2 && inner.contains_key("localID") && inner.contains_key("sessionID")
+        })
 }
 
-/// Recursively remove standalone overriddenSymbolID objects from a JSON value
-fn transform_recursive(value: &mut JsonValue) -> Result<()> {
+/// Filter standalone overriddenSymbolID objects out of every array, then recurse
+/// into the remaining elements.
+fn remove_standalone(value: &mut JsonValue) {
     match value {
-        JsonValue::Object(map) => {
-            // Recurse into all values
-            let keys: Vec<String> = map.keys().cloned().collect();
-            for key in keys {
-                if let Some(val) = map.get_mut(&key) {
-                    transform_recursive(val)?;
-                }
-            }
-        }
-        JsonValue::Array(arr) => {
-            // Filter out standalone overriddenSymbolID objects
-            arr.retain(|element| {
-                if let Some(obj) = element.as_object() {
-                    // Keep element if it's NOT a standalone overriddenSymbolID
-                    !is_standalone_overridden_symbol_id(obj)
-                } else {
-                    // Keep non-object values
-                    true
-                }
+        JsonValue::Object(map) => map.values_mut().for_each(remove_standalone),
+        JsonValue::Array(items) => {
+            items.retain(|item| {
+                !item
+                    .as_object()
+                    .is_some_and(is_standalone_overridden_symbol_id)
             });
-
-            // Then recurse into remaining array elements
-            for val in arr.iter_mut() {
-                transform_recursive(val)?;
-            }
+            items.iter_mut().for_each(remove_standalone);
         }
-        _ => {
-            // Primitives - nothing to do
-        }
+        _ => {}
     }
-
-    Ok(())
 }
 
 #[cfg(test)]

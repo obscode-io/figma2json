@@ -30,50 +30,33 @@ use serde_json::Value as JsonValue;
 /// // children array now contains only the "Visible" node
 /// ```
 pub fn remove_internal_only_nodes(tree: &mut JsonValue) -> Result<()> {
-    transform_recursive(tree)
+    remove_internal_only(tree);
+    Ok(())
 }
 
-/// Recursively remove internal-only nodes from a JSON value
-fn transform_recursive(value: &mut JsonValue) -> Result<()> {
+/// Drop `internalOnly: true` elements from every array (before recursing into the
+/// survivors), and strip the `internalOnly` flag from every object after its
+/// children have been processed.
+///
+/// Only array elements are removed; an internal-only object held directly by an
+/// object key (or the root) merely loses its flag.
+fn remove_internal_only(value: &mut JsonValue) {
     match value {
         JsonValue::Object(map) => {
-            // Recurse into all values
-            let keys: Vec<String> = map.keys().cloned().collect();
-            for key in keys {
-                if let Some(val) = map.get_mut(&key) {
-                    transform_recursive(val)?;
-                }
-            }
-
-            // After recursion, remove internalOnly field itself
-            // (it was only used for filtering, not needed in output)
+            map.values_mut().for_each(remove_internal_only);
             map.remove("internalOnly");
         }
-        JsonValue::Array(arr) => {
-            // Filter out nodes with internalOnly: true FIRST (before recursing)
-            arr.retain(|node| {
-                if let Some(obj) = node.as_object() {
-                    // Keep node if internalOnly is not true
-                    !obj.get("internalOnly")
-                        .and_then(|v| v.as_bool())
-                        .unwrap_or(false)
-                } else {
-                    // Keep non-object values
-                    true
-                }
-            });
-
-            // Then recurse into remaining array elements
-            for val in arr.iter_mut() {
-                transform_recursive(val)?;
-            }
+        JsonValue::Array(items) => {
+            items.retain(|node| !is_internal_only(node));
+            items.iter_mut().for_each(remove_internal_only);
         }
-        _ => {
-            // Primitives - nothing to do
-        }
+        _ => {}
     }
+}
 
-    Ok(())
+/// Whether `node` is an object with `internalOnly: true`.
+fn is_internal_only(node: &JsonValue) -> bool {
+    node.get("internalOnly").and_then(JsonValue::as_bool) == Some(true)
 }
 
 #[cfg(test)]

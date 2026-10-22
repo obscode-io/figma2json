@@ -1,5 +1,6 @@
 use crate::error::Result;
-use serde_json::Value as JsonValue;
+use serde_json::{Map, Value as JsonValue};
+use std::fmt::Write as _;
 use std::fs;
 use std::io::Read;
 use std::path::Path;
@@ -38,76 +39,62 @@ use std::path::Path;
 /// // tree now has "image": {"filename": "images/6049a17a.jpg", "name": "Amazon-beast"}
 /// ```
 pub fn transform_image_hashes(tree: &mut JsonValue, base_dir: &Path) -> Result<()> {
-    transform_recursive(tree, base_dir)
+    transform_recursive(tree, base_dir);
+    Ok(())
 }
 
-/// Recursively transform image hashes in a JSON value
-fn transform_recursive(value: &mut JsonValue, base_dir: &Path) -> Result<()> {
+/// Keys whose object values are image references.
+const IMAGE_FIELDS: &[&str] = &["image", "imageThumbnail"];
+
+/// Walk the tree, rewriting image references in key order.
+///
+/// Each image field is rewritten just before its own subtree is visited, so
+/// files are renamed in document order (which decides which occurrence of a
+/// hash sees the not-yet-renamed file).
+fn transform_recursive(value: &mut JsonValue, base_dir: &Path) {
     match value {
         JsonValue::Object(map) => {
-            // First, check if this object is in an "image" or "imageThumbnail" field
-            // We need to transform any such fields we find
-            let keys: Vec<String> = map.keys().cloned().collect();
-
-            for key in keys {
-                if key == "image" || key == "imageThumbnail" {
-                    // This field might need transformation
-                    if let Some(image_obj) = map.get_mut(&key) {
-                        if let Some(obj) = image_obj.as_object_mut() {
-                            // Check if it has a "hash" field
-                            if let Some(hash_value) = obj.get("hash") {
-                                if let Some(hash_array) = hash_value.as_array() {
-                                    // Convert hash array to filename
-                                    if let Some(mut filename) = hash_to_filename(hash_array) {
-                                        // Try to detect format and rename physical file
-                                        let file_path = base_dir.join(&filename);
-
-                                        if let Some(extension) = detect_image_format(&file_path) {
-                                            // Rename physical file with extension
-                                            let new_filename = format!("{}{}", filename, extension);
-                                            let new_file_path = base_dir.join(&new_filename);
-
-                                            // Attempt to rename the file
-                                            // If it fails, we'll still update the JSON with the extension
-                                            // (user may have already renamed files, or file may not exist yet)
-                                            let _ = fs::rename(&file_path, &new_file_path);
-
-                                            // Update filename to include extension
-                                            filename = new_filename;
-                                        }
-
-                                        // Remove hash field
-                                        obj.remove("hash");
-                                        // Add filename field (with or without extension)
-                                        obj.insert(
-                                            "filename".to_string(),
-                                            JsonValue::String(filename),
-                                        );
-                                    }
-                                }
-                            }
-                        }
+            for (key, child) in map.iter_mut() {
+                if IMAGE_FIELDS.contains(&key.as_str()) {
+                    if let JsonValue::Object(image) = child {
+                        transform_image(image, base_dir);
                     }
                 }
+                transform_recursive(child, base_dir);
+            }
+        }
+        JsonValue::Array(items) => {
+            for item in items {
+                transform_recursive(item, base_dir);
+            }
+        }
+        _ => {}
+    }
+}
 
-                // Recurse into the value regardless
-                if let Some(val) = map.get_mut(&key) {
-                    transform_recursive(val, base_dir)?;
-                }
-            }
-        }
-        JsonValue::Array(arr) => {
-            // Recurse into array elements
-            for val in arr.iter_mut() {
-                transform_recursive(val, base_dir)?;
-            }
-        }
-        _ => {
-            // Primitives - nothing to do
-        }
+/// Replace an image object's `hash` array with a `filename`, renaming the
+/// file on disk to carry the detected extension.
+///
+/// Objects whose `hash` is missing or not a valid byte array are left as-is.
+fn transform_image(image: &mut Map<String, JsonValue>, base_dir: &Path) {
+    let Some(mut filename) = image
+        .get("hash")
+        .and_then(JsonValue::as_array)
+        .and_then(|hash| hash_to_filename(hash))
+    else {
+        return;
+    };
+
+    let file_path = base_dir.join(&filename);
+    if let Some(extension) = detect_image_format(&file_path) {
+        filename.push_str(extension);
+        // A failed rename is fine: the file may already have been renamed
+        // (or not exist yet); the JSON still gets the extension.
+        let _ = fs::rename(&file_path, base_dir.join(&filename));
     }
 
-    Ok(())
+    image.remove("hash");
+    image.insert("filename".to_owned(), JsonValue::String(filename));
 }
 
 /// Convert a hash array of integers to a filename string
@@ -115,80 +102,59 @@ fn transform_recursive(value: &mut JsonValue, base_dir: &Path) -> Result<()> {
 /// Converts each integer to its 2-digit hex representation and concatenates
 /// them with "images/" prefix.
 ///
-/// # Arguments
-/// * `hash` - Array of integers representing the hash
-///
 /// # Returns
 /// * `Some(String)` - The filename string (e.g., "images/6049a17a...")
 /// * `None` - If any element is not a valid u8 integer
 fn hash_to_filename(hash: &[JsonValue]) -> Option<String> {
-    let mut hex_string = String::with_capacity(hash.len() * 2);
-
+    let mut filename = String::with_capacity("images/".len() + hash.len() * 2);
+    filename.push_str("images/");
     for value in hash {
-        let num = value.as_u64()?;
-        if num > 255 {
-            return None;
-        }
-        // Format as 2-digit lowercase hex
-        hex_string.push_str(&format!("{:02x}", num));
+        let byte = u8::try_from(value.as_u64()?).ok()?;
+        // Writing to a String cannot fail.
+        let _ = write!(filename, "{byte:02x}");
     }
-
-    Some(format!("images/{}", hex_string))
+    Some(filename)
 }
 
 /// Detect image format from file header (magic bytes)
 ///
-/// Reads the first few bytes of a file to identify the image format.
-///
-/// # Arguments
-/// * `file_path` - Path to the image file
+/// Reads the first 256 bytes of a file to identify the image format.
 ///
 /// # Returns
-/// * `Some(String)` - The file extension (e.g., ".png", ".jpg", ".webp", ".gif", ".svg")
+/// * `Some(&str)` - The file extension (".png", ".jpg", ".webp", ".gif" or ".svg")
 /// * `None` - If format cannot be detected or file cannot be read
-fn detect_image_format(file_path: &Path) -> Option<String> {
-    // Read first 256 bytes for format detection
-    let mut file = fs::File::open(file_path).ok()?;
-    let mut buffer = vec![0u8; 256];
-    let bytes_read = file.read(&mut buffer).ok()?;
+fn detect_image_format(file_path: &Path) -> Option<&'static str> {
+    const PNG: &[u8] = &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+    const JPEG: &[u8] = &[0xFF, 0xD8, 0xFF];
+    const GIF: &[u8] = b"GIF8";
 
-    if bytes_read < 4 {
+    let mut buffer = [0u8; 256];
+    let bytes_read = fs::File::open(file_path).ok()?.read(&mut buffer).ok()?;
+    let header = &buffer[..bytes_read];
+
+    if header.len() < 4 {
         return None;
     }
-
-    // PNG: 89 50 4E 47 0D 0A 1A 0A
-    if bytes_read >= 8 && buffer[0..8] == [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A] {
-        return Some(".png".to_string());
+    if header.starts_with(PNG) {
+        return Some(".png");
     }
-
-    // JPEG: FF D8 FF
-    if bytes_read >= 3 && buffer[0..3] == [0xFF, 0xD8, 0xFF] {
-        return Some(".jpg".to_string());
+    if header.starts_with(JPEG) {
+        return Some(".jpg");
     }
-
-    // GIF: 47 49 46 38 (GIF8)
-    if bytes_read >= 4 && buffer[0..4] == [0x47, 0x49, 0x46, 0x38] {
-        return Some(".gif".to_string());
+    if header.starts_with(GIF) {
+        return Some(".gif");
     }
-
-    // WebP: 52 49 46 46 [4 bytes] 57 45 42 50 (RIFF....WEBP)
-    if bytes_read >= 12
-        && buffer[0..4] == [0x52, 0x49, 0x46, 0x46]
-        && buffer[8..12] == [0x57, 0x45, 0x42, 0x50]
-    {
-        return Some(".webp".to_string());
+    // WebP: "RIFF" <4-byte size> "WEBP"
+    if header.len() >= 12 && header.starts_with(b"RIFF") && &header[8..12] == b"WEBP" {
+        return Some(".webp");
     }
-
-    // SVG: Check for XML/SVG markers (text-based)
-    if let Ok(text) = std::str::from_utf8(&buffer[..bytes_read]) {
-        let text_lower = text.to_lowercase();
-        if text_lower.contains("<svg")
-            || (text_lower.contains("<?xml") && text_lower.contains("svg"))
-        {
-            return Some(".svg".to_string());
+    // SVG: text-based, look for XML/SVG markers
+    if let Ok(text) = std::str::from_utf8(header) {
+        let text = text.to_lowercase();
+        if text.contains("<svg") || (text.contains("<?xml") && text.contains("svg")) {
+            return Some(".svg");
         }
     }
-
     None
 }
 

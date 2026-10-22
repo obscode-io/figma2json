@@ -1,5 +1,6 @@
+use super::walk::for_each_object_mut;
 use crate::error::Result;
-use serde_json::Value as JsonValue;
+use serde_json::{Map, Value as JsonValue};
 
 /// Remove geometry-related fields from all objects in the JSON tree
 ///
@@ -45,7 +46,8 @@ use serde_json::Value as JsonValue;
 /// // tree now has only "name" and "size" fields
 /// ```
 pub fn remove_geometry_fields(tree: &mut JsonValue) -> Result<()> {
-    transform_recursive(tree, true)
+    remove_geometry(tree, ALL_GEOMETRY_FIELDS);
+    Ok(())
 }
 
 /// Like [`remove_geometry_fields`], but only removes `fillGeometry` / `strokeGeometry`.
@@ -54,95 +56,56 @@ pub fn remove_geometry_fields(tree: &mut JsonValue) -> Result<()> {
 /// including `styleID` in text `styleOverrideTable`s (which `characterStyleIDs` point at, so
 /// mixed-style text can no longer be mapped) and in vector networks. This keeps those.
 pub fn remove_geometry_only(tree: &mut JsonValue) -> Result<()> {
-    transform_recursive(tree, false)
+    remove_geometry(tree, PATH_GEOMETRY_FIELDS);
+    Ok(())
+}
+
+/// Path geometry keys, removed by both passes.
+const PATH_GEOMETRY_FIELDS: &[&str] = &["fillGeometry", "strokeGeometry"];
+
+/// Everything [`remove_geometry_fields`] removes.
+const ALL_GEOMETRY_FIELDS: &[&str] = &["fillGeometry", "strokeGeometry", "windingRule", "styleID"];
+
+/// Name prefixes that mark a node as an icon whose geometry must be kept.
+const ICON_NAME_PREFIXES: &[&str] = &["icon/", "arrows/"];
+
+/// Remove `fields` from every object that is not an icon or image node.
+fn remove_geometry(tree: &mut JsonValue, fields: &[&str]) {
+    for_each_object_mut(tree, &mut |map| {
+        if !should_preserve_geometry(map) {
+            for field in fields {
+                map.remove(*field);
+            }
+        }
+    });
 }
 
 /// Determines if geometry data should be preserved for this node
 ///
 /// Geometry is preserved for icons and images, which are identified by:
-/// 1. Having exportSettings with imageType field at the top level (indicates SVG/PNG export)
-/// 2. Having a name starting with "icon/" or "arrows/" (common icon naming patterns)
+/// 1. Having a name starting with "icon/" or "arrows/" (common icon naming patterns)
+/// 2. Having an exportSettings entry with an imageType field in
+///    symbolData.symbolOverrides (indicates SVG/PNG export)
 ///
 /// Note: We only check the node's OWN name, not names in symbolOverrides which represent
 /// child components.
-///
-/// # Arguments
-/// * `value` - The JSON node to check
-///
-/// # Returns
-/// * `true` if geometry should be preserved, `false` if it should be removed
-fn should_preserve_geometry(value: &JsonValue) -> bool {
-    if let Some(obj) = value.as_object() {
-        // Check 1: Look for icon/image name patterns (THIS node's name, not children)
-        if let Some(name) = obj.get("name") {
-            if let Some(name_str) = name.as_str() {
-                if name_str.starts_with("icon/") || name_str.starts_with("arrows/") {
-                    return true; // Icon or arrow, preserve geometry
-                }
-            }
-        }
-
-        // Check 2: Look for exportSettings with imageType in symbolData.symbolOverrides
-        // This checks if THIS specific node has export settings (not child overrides)
-        if let Some(symbol_data) = obj.get("symbolData") {
-            if let Some(overrides) = symbol_data.get("symbolOverrides") {
-                if let Some(overrides_array) = overrides.as_array() {
-                    for override_item in overrides_array {
-                        if let Some(export_settings) = override_item.get("exportSettings") {
-                            if let Some(settings_array) = export_settings.as_array() {
-                                for setting in settings_array {
-                                    if setting.get("imageType").is_some() {
-                                        return true; // Has imageType, preserve geometry
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+fn should_preserve_geometry(obj: &Map<String, JsonValue>) -> bool {
+    let is_icon = obj
+        .get("name")
+        .and_then(JsonValue::as_str)
+        .is_some_and(|name| ICON_NAME_PREFIXES.iter().any(|p| name.starts_with(p)));
+    if is_icon {
+        return true;
     }
 
-    false // Not an icon/image, remove geometry
-}
-
-/// Recursively remove geometry fields from a JSON value
-fn transform_recursive(value: &mut JsonValue, strip_style_and_winding: bool) -> Result<()> {
-    // Check if we should preserve geometry BEFORE matching (to avoid borrow checker issues)
-    let preserve = should_preserve_geometry(value);
-
-    match value {
-        JsonValue::Object(map) => {
-            // Only remove geometry if this is not an icon/image node
-            if !preserve {
-                map.remove("fillGeometry");
-                map.remove("strokeGeometry");
-                if strip_style_and_winding {
-                    map.remove("windingRule");
-                    map.remove("styleID");
-                }
-            }
-
-            // Recurse into all remaining values
-            let keys: Vec<String> = map.keys().cloned().collect();
-            for key in keys {
-                if let Some(val) = map.get_mut(&key) {
-                    transform_recursive(val, strip_style_and_winding)?;
-                }
-            }
-        }
-        JsonValue::Array(arr) => {
-            // Recurse into array elements
-            for val in arr.iter_mut() {
-                transform_recursive(val, strip_style_and_winding)?;
-            }
-        }
-        _ => {
-            // Primitives - nothing to do
-        }
-    }
-
-    Ok(())
+    obj.get("symbolData")
+        .and_then(|symbol_data| symbol_data.get("symbolOverrides"))
+        .and_then(JsonValue::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|item| item.get("exportSettings").and_then(JsonValue::as_array))
+        .flatten()
+        .any(|setting| setting.get("imageType").is_some())
 }
 
 #[cfg(test)]

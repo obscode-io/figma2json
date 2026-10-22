@@ -1,3 +1,4 @@
+use super::walk::for_each_object_mut;
 use crate::error::Result;
 use serde_json::Value as JsonValue;
 
@@ -41,41 +42,23 @@ use serde_json::Value as JsonValue;
 /// assert!(tree.get("rectangleBottomRightCornerRadius").is_none());
 /// ```
 pub fn remove_redundant_corner_radii(tree: &mut JsonValue) -> Result<()> {
-    transform_recursive(tree)
-}
-
-fn transform_recursive(value: &mut JsonValue) -> Result<()> {
-    match value {
-        JsonValue::Object(map) => {
-            // Only remove individual corner radii if cornerRadius exists
-            if map.contains_key("cornerRadius") {
-                map.remove("rectangleTopLeftCornerRadius");
-                map.remove("rectangleTopRightCornerRadius");
-                map.remove("rectangleBottomLeftCornerRadius");
-                map.remove("rectangleBottomRightCornerRadius");
-            }
-
-            // Recurse into all remaining values
-            let keys: Vec<String> = map.keys().cloned().collect();
-            for key in keys {
-                if let Some(val) = map.get_mut(&key) {
-                    transform_recursive(val)?;
-                }
+    for_each_object_mut(tree, &mut |map| {
+        if map.contains_key("cornerRadius") {
+            for field in CORNER_FIELDS {
+                map.remove(*field);
             }
         }
-        JsonValue::Array(arr) => {
-            // Recurse into array elements
-            for val in arr.iter_mut() {
-                transform_recursive(val)?;
-            }
-        }
-        _ => {
-            // Primitives - nothing to do
-        }
-    }
-
+    });
     Ok(())
 }
+
+/// Per-corner radius keys made redundant by `cornerRadius`.
+const CORNER_FIELDS: &[&str] = &[
+    "rectangleTopLeftCornerRadius",
+    "rectangleTopRightCornerRadius",
+    "rectangleBottomLeftCornerRadius",
+    "rectangleBottomRightCornerRadius",
+];
 
 #[cfg(test)]
 mod tests {

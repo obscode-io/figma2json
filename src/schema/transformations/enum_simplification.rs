@@ -1,5 +1,5 @@
 use crate::error::Result;
-use serde_json::Value as JsonValue;
+use serde_json::{Map, Value as JsonValue};
 
 /// Simplify enum objects to simple string values
 ///
@@ -38,73 +38,45 @@ use serde_json::Value as JsonValue;
 /// // tree now has "type": "FRAME" and "blendMode": "NORMAL"
 /// ```
 pub fn simplify_enums(tree: &mut JsonValue) -> Result<()> {
-    transform_recursive(tree)
-}
-
-/// Recursively simplify enum objects in a JSON value
-fn transform_recursive(value: &mut JsonValue) -> Result<()> {
-    match value {
-        JsonValue::Object(map) => {
-            // Collect keys to avoid borrow checker issues
-            let keys: Vec<String> = map.keys().cloned().collect();
-
-            for key in keys {
-                if let Some(val) = map.get(&key) {
-                    // Check if this value is an enum object
-                    if let Some(obj) = val.as_object() {
-                        if is_enum_object(obj) {
-                            // Extract the value and replace the enum object
-                            if let Some(enum_value) = extract_enum_value(obj) {
-                                map.insert(key.clone(), JsonValue::String(enum_value));
-                                continue; // Skip recursion since we replaced the object
-                            }
-                        }
-                    }
-                }
-
-                // Recurse into the value if it wasn't replaced
-                if let Some(val) = map.get_mut(&key) {
-                    transform_recursive(val)?;
-                }
-            }
-        }
-        JsonValue::Array(arr) => {
-            // Simplify enum elements (e.g. variableScopes, toggledOffOTFeatures),
-            // recurse into everything else
-            for val in arr.iter_mut() {
-                let simplified = val
-                    .as_object()
-                    .filter(|obj| is_enum_object(obj))
-                    .and_then(extract_enum_value);
-                match simplified {
-                    Some(enum_value) => *val = JsonValue::String(enum_value),
-                    None => transform_recursive(val)?,
-                }
-            }
-        }
-        _ => {
-            // Primitives - nothing to do
-        }
-    }
-
+    simplify_children(tree);
     Ok(())
 }
 
+/// Simplify every enum held directly by `value` (an object's values or an
+/// array's elements, e.g. `variableScopes`) and recurse into everything else.
+///
+/// `value` itself is never replaced, so an enum object at the root is kept.
+fn simplify_children(value: &mut JsonValue) {
+    match value {
+        JsonValue::Object(map) => map.values_mut().for_each(simplify_value),
+        JsonValue::Array(items) => items.iter_mut().for_each(simplify_value),
+        _ => {}
+    }
+}
+
+/// Replace `value` with its enum string if it is an enum object; otherwise
+/// recurse into it. Replaced values are not recursed into.
+fn simplify_value(value: &mut JsonValue) {
+    let simplified = value
+        .as_object()
+        .filter(|obj| is_enum_object(obj))
+        .and_then(extract_enum_value);
+    match simplified {
+        Some(enum_value) => *value = JsonValue::String(enum_value),
+        None => simplify_children(value),
+    }
+}
+
 /// Check if an object is an enum object (has __enum__ and value fields)
-fn is_enum_object(obj: &serde_json::Map<String, JsonValue>) -> bool {
+fn is_enum_object(obj: &Map<String, JsonValue>) -> bool {
     obj.contains_key("__enum__") && obj.contains_key("value")
 }
 
 /// Extract the value from an enum object
 ///
-/// # Arguments
-/// * `obj` - Enum object with __enum__ and value fields
-///
-/// # Returns
-/// * `Some(String)` - The enum value string
-/// * `None` - If the value field is not a string
-fn extract_enum_value(obj: &serde_json::Map<String, JsonValue>) -> Option<String> {
-    obj.get("value")?.as_str().map(|s| s.to_string())
+/// Returns `None` if the value field is missing or not a string.
+fn extract_enum_value(obj: &Map<String, JsonValue>) -> Option<String> {
+    obj.get("value")?.as_str().map(str::to_owned)
 }
 
 #[cfg(test)]

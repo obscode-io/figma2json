@@ -1,5 +1,6 @@
+use super::walk::for_each_object_mut;
 use crate::error::Result;
-use serde_json::Value as JsonValue;
+use serde_json::{json, Map, Value as JsonValue};
 use std::f64::consts::PI;
 
 /// Transform 2D affine transformation matrices to CSS positioning properties
@@ -38,57 +39,25 @@ use std::f64::consts::PI;
 /// // tree now has "transform": {"x": 100.0, "y": 50.0, "rotation": 0.0, ...}
 /// ```
 pub fn transform_matrix_to_css(tree: &mut JsonValue) -> Result<()> {
-    transform_recursive(tree)
-}
-
-/// Recursively transform matrix transforms in a JSON value
-fn transform_recursive(value: &mut JsonValue) -> Result<()> {
-    match value {
-        JsonValue::Object(map) => {
-            // Check if this is a "transform" object with matrix fields
-            if let Some(transform_value) = map.get("transform") {
-                if let Some(transform_obj) = transform_value.as_object() {
-                    // Check if it has matrix fields
-                    if has_matrix_fields(transform_obj) {
-                        // Extract matrix values
-                        if let Some(css_transform) = extract_and_decompose_matrix(transform_obj) {
-                            // Replace the transform object
-                            map.insert("transform".to_string(), css_transform);
-                        }
-                    }
-                }
-            }
-
-            // Recurse into all values
-            let keys: Vec<String> = map.keys().cloned().collect();
-            for key in keys {
-                if let Some(val) = map.get_mut(&key) {
-                    transform_recursive(val)?;
-                }
-            }
+    for_each_object_mut(tree, &mut |map| {
+        let css_transform = map
+            .get("transform")
+            .and_then(JsonValue::as_object)
+            .filter(|transform| has_matrix_fields(transform))
+            .and_then(extract_and_decompose_matrix);
+        if let Some(css_transform) = css_transform {
+            map.insert("transform".to_owned(), css_transform);
         }
-        JsonValue::Array(arr) => {
-            // Recurse into array elements
-            for val in arr.iter_mut() {
-                transform_recursive(val)?;
-            }
-        }
-        _ => {
-            // Primitives - nothing to do
-        }
-    }
-
+    });
     Ok(())
 }
 
+/// The six affine matrix components a `transform` object must carry.
+const MATRIX_FIELDS: &[&str] = &["m00", "m01", "m02", "m10", "m11", "m12"];
+
 /// Check if an object has all required matrix fields
-fn has_matrix_fields(obj: &serde_json::Map<String, JsonValue>) -> bool {
-    obj.contains_key("m00")
-        && obj.contains_key("m01")
-        && obj.contains_key("m02")
-        && obj.contains_key("m10")
-        && obj.contains_key("m11")
-        && obj.contains_key("m12")
+fn has_matrix_fields(obj: &Map<String, JsonValue>) -> bool {
+    MATRIX_FIELDS.iter().all(|field| obj.contains_key(*field))
 }
 
 /// Extract matrix values and decompose into CSS properties
@@ -99,7 +68,7 @@ fn has_matrix_fields(obj: &serde_json::Map<String, JsonValue>) -> bool {
 /// - scaleX: only if not ~1.0
 /// - scaleY: only if not ~1.0
 /// - skewX: only if not ~0.0
-fn extract_and_decompose_matrix(obj: &serde_json::Map<String, JsonValue>) -> Option<JsonValue> {
+fn extract_and_decompose_matrix(obj: &Map<String, JsonValue>) -> Option<JsonValue> {
     // Extract matrix components
     let m00 = obj.get("m00")?.as_f64()?;
     let m01 = obj.get("m01")?.as_f64()?;
@@ -112,29 +81,29 @@ fn extract_and_decompose_matrix(obj: &serde_json::Map<String, JsonValue>) -> Opt
     let css = decompose_matrix(m00, m01, m02, m10, m11, m12);
 
     // Build result object, only including non-default values
-    let mut result = serde_json::Map::new();
+    let mut result = Map::new();
 
     // Always include x and y
-    result.insert("x".to_string(), serde_json::json!(css.x));
-    result.insert("y".to_string(), serde_json::json!(css.y));
+    result.insert("x".to_owned(), json!(css.x));
+    result.insert("y".to_owned(), json!(css.y));
 
     // Only include non-default values (using tolerance for float comparison)
     const EPSILON: f64 = 1e-10;
 
     if css.rotation.abs() > EPSILON {
-        result.insert("rotation".to_string(), serde_json::json!(css.rotation));
+        result.insert("rotation".to_owned(), json!(css.rotation));
     }
 
     if (css.scale_x - 1.0).abs() > EPSILON {
-        result.insert("scaleX".to_string(), serde_json::json!(css.scale_x));
+        result.insert("scaleX".to_owned(), json!(css.scale_x));
     }
 
     if (css.scale_y - 1.0).abs() > EPSILON {
-        result.insert("scaleY".to_string(), serde_json::json!(css.scale_y));
+        result.insert("scaleY".to_owned(), json!(css.scale_y));
     }
 
     if css.skew_x.abs() > EPSILON {
-        result.insert("skewX".to_string(), serde_json::json!(css.skew_x));
+        result.insert("skewX".to_owned(), json!(css.skew_x));
     }
 
     Some(JsonValue::Object(result))

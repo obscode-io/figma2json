@@ -1,3 +1,4 @@
+use super::walk::for_each_object_mut;
 use crate::error::Result;
 use serde_json::Value as JsonValue;
 
@@ -39,52 +40,22 @@ use serde_json::Value as JsonValue;
 /// assert_eq!(fills[0].get("color").unwrap().as_str(), Some("#000000"));
 /// ```
 pub fn remove_invisible_paints(tree: &mut JsonValue) -> Result<()> {
-    transform_recursive(tree)
-}
-
-fn transform_recursive(value: &mut JsonValue) -> Result<()> {
-    match value {
-        JsonValue::Object(map) => {
-            // Filter fillPaints array
-            if let Some(JsonValue::Array(paints)) = map.get_mut("fillPaints") {
+    for_each_object_mut(tree, &mut |map| {
+        for field in PAINT_FIELDS {
+            if let Some(JsonValue::Array(paints)) = map.get_mut(*field) {
                 paints.retain(|paint| !is_invisible(paint));
             }
-
-            // Filter strokePaints array
-            if let Some(JsonValue::Array(paints)) = map.get_mut("strokePaints") {
-                paints.retain(|paint| !is_invisible(paint));
-            }
-
-            // Recurse into all remaining values
-            let keys: Vec<String> = map.keys().cloned().collect();
-            for key in keys {
-                if let Some(val) = map.get_mut(&key) {
-                    transform_recursive(val)?;
-                }
-            }
         }
-        JsonValue::Array(arr) => {
-            // Recurse into array elements
-            for val in arr.iter_mut() {
-                transform_recursive(val)?;
-            }
-        }
-        _ => {
-            // Primitives - nothing to do
-        }
-    }
-
+    });
     Ok(())
 }
 
+/// Paint array keys whose invisible entries are filtered out.
+const PAINT_FIELDS: &[&str] = &["fillPaints", "strokePaints"];
+
 /// Checks if a paint object is invisible (has visible: false)
 fn is_invisible(paint: &JsonValue) -> bool {
-    if let Some(visible) = paint.get("visible") {
-        if let Some(visible_bool) = visible.as_bool() {
-            return !visible_bool;
-        }
-    }
-    false
+    paint.get("visible").and_then(JsonValue::as_bool) == Some(false)
 }
 
 #[cfg(test)]

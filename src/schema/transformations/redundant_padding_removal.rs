@@ -1,3 +1,4 @@
+use super::walk::for_each_object_mut;
 use crate::error::Result;
 use serde_json::Value as JsonValue;
 
@@ -11,8 +12,8 @@ use serde_json::Value as JsonValue;
 ///
 /// In Figma's auto-layout system, padding can be specified either with specific
 /// side values (paddingRight, paddingBottom) or with axis-based values
-/// (horizontalPadding, verticalPadding). When both exist, the specific values
-/// are redundant and can be removed to reduce JSON size.
+/// (horizontalPadding, verticalPadding). When a specific value equals its axis
+/// value it is redundant and can be removed to reduce JSON size.
 ///
 /// # Example
 ///
@@ -36,49 +37,25 @@ use serde_json::Value as JsonValue;
 /// assert!(tree.get("stackPaddingBottom").is_none());
 /// ```
 pub fn remove_redundant_padding(tree: &mut JsonValue) -> Result<()> {
-    transform_recursive(tree)
-}
-
-fn transform_recursive(value: &mut JsonValue) -> Result<()> {
-    match value {
-        JsonValue::Object(map) => {
-            // stackHorizontalPadding is the LEFT padding and stackVerticalPadding the TOP
-            // padding; stackPaddingRight / stackPaddingBottom are the other sides. They
-            // are only redundant when they are equal, otherwise removing them loses
-            // asymmetric padding (e.g. 16px left / 8px right).
-            if map.contains_key("stackPaddingRight")
-                && map.get("stackPaddingRight") == map.get("stackHorizontalPadding")
-            {
-                map.remove("stackPaddingRight");
-            }
-
-            if map.contains_key("stackPaddingBottom")
-                && map.get("stackPaddingBottom") == map.get("stackVerticalPadding")
-            {
-                map.remove("stackPaddingBottom");
-            }
-
-            // Recurse into all remaining values
-            let keys: Vec<String> = map.keys().cloned().collect();
-            for key in keys {
-                if let Some(val) = map.get_mut(&key) {
-                    transform_recursive(val)?;
-                }
+    for_each_object_mut(tree, &mut |map| {
+        // stackHorizontalPadding is the LEFT padding and stackVerticalPadding the TOP
+        // padding; stackPaddingRight / stackPaddingBottom are the other sides. They
+        // are only redundant when they are equal, otherwise removing them loses
+        // asymmetric padding (e.g. 16px left / 8px right).
+        for (side, axis) in PADDING_PAIRS {
+            if map.contains_key(*side) && map.get(*side) == map.get(*axis) {
+                map.remove(*side);
             }
         }
-        JsonValue::Array(arr) => {
-            // Recurse into array elements
-            for val in arr.iter_mut() {
-                transform_recursive(val)?;
-            }
-        }
-        _ => {
-            // Primitives - nothing to do
-        }
-    }
-
+    });
     Ok(())
 }
+
+/// `(side, axis)` pairs: `side` is dropped when it equals `axis`.
+const PADDING_PAIRS: &[(&str, &str)] = &[
+    ("stackPaddingRight", "stackHorizontalPadding"),
+    ("stackPaddingBottom", "stackVerticalPadding"),
+];
 
 #[cfg(test)]
 mod tests {

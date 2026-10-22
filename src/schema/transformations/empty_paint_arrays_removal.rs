@@ -1,3 +1,4 @@
+use super::walk::for_each_object_mut;
 use crate::error::Result;
 use serde_json::Value as JsonValue;
 
@@ -33,47 +34,18 @@ use serde_json::Value as JsonValue;
 /// assert!(tree.get("size").is_some());
 /// ```
 pub fn remove_empty_paint_arrays(tree: &mut JsonValue) -> Result<()> {
-    transform_recursive(tree)
-}
-
-fn transform_recursive(value: &mut JsonValue) -> Result<()> {
-    match value {
-        JsonValue::Object(map) => {
-            // Check and remove empty fillPaints array
-            if let Some(JsonValue::Array(paints)) = map.get("fillPaints") {
-                if paints.is_empty() {
-                    map.remove("fillPaints");
-                }
-            }
-
-            // Check and remove empty strokePaints array
-            if let Some(JsonValue::Array(paints)) = map.get("strokePaints") {
-                if paints.is_empty() {
-                    map.remove("strokePaints");
-                }
-            }
-
-            // Recurse into all remaining values
-            let keys: Vec<String> = map.keys().cloned().collect();
-            for key in keys {
-                if let Some(val) = map.get_mut(&key) {
-                    transform_recursive(val)?;
-                }
+    for_each_object_mut(tree, &mut |map| {
+        for field in PAINT_FIELDS {
+            if matches!(map.get(*field), Some(JsonValue::Array(paints)) if paints.is_empty()) {
+                map.remove(*field);
             }
         }
-        JsonValue::Array(arr) => {
-            // Recurse into array elements
-            for val in arr.iter_mut() {
-                transform_recursive(val)?;
-            }
-        }
-        _ => {
-            // Primitives - nothing to do
-        }
-    }
-
+    });
     Ok(())
 }
+
+/// Paint array keys that are dropped when empty.
+const PAINT_FIELDS: &[&str] = &["fillPaints", "strokePaints"];
 
 #[cfg(test)]
 mod tests {

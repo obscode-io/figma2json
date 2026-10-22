@@ -1,3 +1,4 @@
+use super::walk::for_each_object_mut;
 use crate::error::Result;
 use serde_json::Value as JsonValue;
 
@@ -44,60 +45,42 @@ use serde_json::Value as JsonValue;
 /// // tree now has only "name" and "visible" fields
 /// ```
 pub fn remove_image_metadata_fields(tree: &mut JsonValue) -> Result<()> {
-    transform_recursive(tree)
-}
+    for_each_object_mut(tree, &mut |map| {
+        for field in FIELDS {
+            map.remove(*field);
+        }
 
-/// Recursively remove image metadata fields from a JSON value
-fn transform_recursive(value: &mut JsonValue) -> Result<()> {
-    match value {
-        JsonValue::Object(map) => {
-            // Remove image metadata fields if they exist
-            map.remove("thumbHash");
-            map.remove("animationFrame");
-            map.remove("imageShouldColorManage");
-            map.remove("imageScaleMode");
-            map.remove("originalImageWidth");
-            map.remove("originalImageHeight");
-            map.remove("altText");
-            map.remove("imageThumbnail");
-
-            // Check if this is a paint object with image properties
-            // (rotation and scale should only be removed in certain contexts)
-            if map.contains_key("type") {
-                if let Some(type_val) = map.get("type") {
-                    if let Some(type_obj) = type_val.as_object() {
-                        if let Some(value_str) = type_obj.get("value").and_then(|v| v.as_str()) {
-                            if value_str == "IMAGE" {
-                                // This is an image paint object, remove rotation and scale
-                                map.remove("rotation");
-                                map.remove("scale");
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Recurse into all remaining values
-            let keys: Vec<String> = map.keys().cloned().collect();
-            for key in keys {
-                if let Some(val) = map.get_mut(&key) {
-                    transform_recursive(val)?;
-                }
+        // rotation and scale are only image metadata inside image paint objects,
+        // i.e. objects whose `type` is the (unsimplified) enum `{"value": "IMAGE"}`.
+        let is_image_paint = map
+            .get("type")
+            .and_then(JsonValue::as_object)
+            .and_then(|type_obj| type_obj.get("value"))
+            .and_then(JsonValue::as_str)
+            == Some("IMAGE");
+        if is_image_paint {
+            for field in IMAGE_PAINT_FIELDS {
+                map.remove(*field);
             }
         }
-        JsonValue::Array(arr) => {
-            // Recurse into array elements
-            for val in arr.iter_mut() {
-                transform_recursive(val)?;
-            }
-        }
-        _ => {
-            // Primitives - nothing to do
-        }
-    }
-
+    });
     Ok(())
 }
+
+/// Keys removed from every object.
+const FIELDS: &[&str] = &[
+    "thumbHash",
+    "animationFrame",
+    "imageShouldColorManage",
+    "imageScaleMode",
+    "originalImageWidth",
+    "originalImageHeight",
+    "altText",
+    "imageThumbnail",
+];
+
+/// Keys removed only from image paint objects.
+const IMAGE_PAINT_FIELDS: &[&str] = &["rotation", "scale"];
 
 #[cfg(test)]
 mod tests {
