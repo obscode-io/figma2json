@@ -128,7 +128,6 @@ mod tests {
         remove_overridden_symbol_id(&mut tree).unwrap();
 
         let overrides = tree.get("symbolOverrides").unwrap().as_array().unwrap();
-        // Object preserved because it has other fields
         assert_eq!(overrides.len(), 1);
         assert!(overrides[0].get("overriddenSymbolID").is_some());
         assert_eq!(overrides[0].get("visible").unwrap().as_bool(), Some(false));
@@ -187,7 +186,6 @@ mod tests {
         remove_overridden_symbol_id(&mut tree).unwrap();
 
         let overrides = tree.get("symbolOverrides").unwrap().as_array().unwrap();
-        // All standalone objects removed, empty array
         assert_eq!(overrides.len(), 0);
     }
 
@@ -209,7 +207,6 @@ mod tests {
         remove_overridden_symbol_id(&mut tree).unwrap();
 
         let overrides = tree.get("symbolOverrides").unwrap().as_array().unwrap();
-        // All objects preserved
         assert_eq!(overrides.len(), 2);
     }
 
@@ -275,8 +272,6 @@ mod tests {
 
     #[test]
     fn test_overridden_symbol_id_with_extra_fields() {
-        // If overriddenSymbolID object has extra fields beyond localID/sessionID,
-        // the entire object should be preserved
         let mut tree = json!({
             "symbolOverrides": [
                 {
@@ -292,13 +287,11 @@ mod tests {
         remove_overridden_symbol_id(&mut tree).unwrap();
 
         let overrides = tree.get("symbolOverrides").unwrap().as_array().unwrap();
-        // Preserved because overriddenSymbolID has extra fields
         assert_eq!(overrides.len(), 1);
     }
 
     #[test]
     fn test_overridden_symbol_id_missing_session_id() {
-        // If overriddenSymbolID is missing sessionID, preserve the object
         let mut tree = json!({
             "symbolOverrides": [
                 {
@@ -312,7 +305,6 @@ mod tests {
         remove_overridden_symbol_id(&mut tree).unwrap();
 
         let overrides = tree.get("symbolOverrides").unwrap().as_array().unwrap();
-        // Preserved because it's malformed
         assert_eq!(overrides.len(), 1);
     }
 
@@ -325,7 +317,6 @@ mod tests {
         remove_overridden_symbol_id(&mut tree).unwrap();
 
         let data = tree.get("data").unwrap().as_array().unwrap();
-        // Non-object elements should be preserved
         assert_eq!(data.len(), 6);
     }
 
@@ -358,7 +349,6 @@ mod tests {
 
     #[test]
     fn test_real_world_example() {
-        // Based on actual data from archives/roles-members.json
         let mut tree = json!({
             "symbolData": {
                 "symbolOverrides": [
@@ -405,10 +395,8 @@ mod tests {
         remove_overridden_symbol_id(&mut tree).unwrap();
 
         let overrides = tree["symbolData"]["symbolOverrides"].as_array().unwrap();
-        // Should remove only the 2 standalone overriddenSymbolID objects
         assert_eq!(overrides.len(), 5);
 
-        // Verify the kept objects
         assert!(overrides[0].get("textData").is_some());
         assert_eq!(
             overrides[0]["textData"]["characters"].as_str(),

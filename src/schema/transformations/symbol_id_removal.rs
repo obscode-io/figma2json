@@ -250,7 +250,6 @@ mod tests {
 
     #[test]
     fn test_symbol_id_not_object() {
-        // If symbolID is not an object, keep it (shouldn't happen, but be defensive)
         let mut input = json!({
             "name": "Test",
             "symbolID": "string_value"

@@ -60,11 +60,9 @@ mod tests {
 
         remove_root_metadata(&mut output).unwrap();
 
-        // version and fileType should be removed
         assert!(output.get("version").is_none());
         assert!(output.get("fileType").is_none());
 
-        // document should be preserved
         assert!(output.get("document").is_some());
         assert_eq!(
             output
@@ -88,10 +86,8 @@ mod tests {
 
         remove_root_metadata(&mut output).unwrap();
 
-        // version should be removed
         assert!(output.get("version").is_none());
 
-        // document should be preserved
         assert!(output.get("document").is_some());
     }
 
@@ -106,10 +102,8 @@ mod tests {
 
         remove_root_metadata(&mut output).unwrap();
 
-        // fileType should be removed
         assert!(output.get("fileType").is_none());
 
-        // document should be preserved
         assert!(output.get("document").is_some());
     }
 
@@ -121,7 +115,6 @@ mod tests {
             }
         });
 
-        // Should not fail if version and fileType are already missing
         remove_root_metadata(&mut output).unwrap();
 
         assert!(output.get("version").is_none());
@@ -145,11 +138,9 @@ mod tests {
 
         remove_root_metadata(&mut output).unwrap();
 
-        // Only version and fileType should be removed
         assert!(output.get("version").is_none());
         assert!(output.get("fileType").is_none());
 
-        // All other fields preserved
         assert!(output.get("document").is_some());
         assert!(output.get("metadata").is_some());
         assert!(output.get("otherData").is_some());
@@ -180,11 +171,9 @@ mod tests {
 
         remove_root_metadata(&mut output).unwrap();
 
-        // Root-level version and fileType removed
         assert!(output.get("version").is_none());
         assert!(output.get("fileType").is_none());
 
-        // Nested version and fileType preserved
         assert_eq!(output["document"].get("version").unwrap().as_i64(), Some(2));
         assert_eq!(
             output["document"]["metadata"]
@@ -207,7 +196,6 @@ mod tests {
 
             remove_root_metadata(&mut output).unwrap();
 
-            // All version values should be removed
             assert!(output.get("version").is_none());
         }
     }
@@ -224,7 +212,6 @@ mod tests {
 
             remove_root_metadata(&mut output).unwrap();
 
-            // All fileType values should be removed
             assert!(output.get("fileType").is_none());
         }
     }
@@ -233,10 +220,8 @@ mod tests {
     fn test_not_an_object() {
         let mut output = json!([1, 2, 3]);
 
-        // Should not fail on non-object input
         remove_root_metadata(&mut output).unwrap();
 
-        // Array should remain unchanged
         assert_eq!(output.as_array().unwrap().len(), 3);
     }
 
@@ -246,7 +231,6 @@ mod tests {
 
         remove_root_metadata(&mut output).unwrap();
 
-        // Empty object should remain empty
         assert_eq!(output.as_object().unwrap().len(), 0);
     }
 
@@ -254,10 +238,8 @@ mod tests {
     fn test_string_primitive() {
         let mut output = json!("document");
 
-        // Should not fail on primitive input
         remove_root_metadata(&mut output).unwrap();
 
-        // String should remain unchanged
         assert_eq!(output.as_str(), Some("document"));
     }
 }

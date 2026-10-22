@@ -183,10 +183,8 @@ mod tests {
 
         simplify_enums(&mut tree).unwrap();
 
-        // Root enum simplified
         assert_eq!(tree.get("type").unwrap().as_str(), Some("DOCUMENT"));
 
-        // Children enums simplified
         assert_eq!(tree["children"][0]["type"].as_str(), Some("FRAME"));
         assert_eq!(tree["children"][1]["phase"].as_str(), Some("CREATED"));
     }
@@ -216,7 +214,6 @@ mod tests {
 
         simplify_enums(&mut tree).unwrap();
 
-        // Deeply nested enums simplified
         let paint = &tree["document"]["children"][0]["fillPaints"][0];
         assert_eq!(paint["type"].as_str(), Some("IMAGE"));
         assert_eq!(paint["blendMode"].as_str(), Some("NORMAL"));
@@ -239,10 +236,8 @@ mod tests {
 
         simplify_enums(&mut tree).unwrap();
 
-        // Enum simplified
         assert_eq!(tree.get("type").unwrap().as_str(), Some("FRAME"));
 
-        // Non-enum object preserved
         assert_eq!(tree["transform"]["x"].as_f64(), Some(100.0));
         assert_eq!(tree["transform"]["y"].as_f64(), Some(200.0));
         assert_eq!(tree["transform"]["rotation"].as_f64(), Some(0.0));
@@ -259,7 +254,6 @@ mod tests {
 
         simplify_enums(&mut tree).unwrap();
 
-        // Tree without enums should be unchanged
         assert_eq!(tree.get("name").unwrap().as_str(), Some("Rectangle"));
         assert_eq!(tree.get("width").unwrap().as_i64(), Some(100));
         assert_eq!(tree.get("height").unwrap().as_i64(), Some(200));
@@ -289,7 +283,6 @@ mod tests {
 
         simplify_enums(&mut tree).unwrap();
 
-        // All enum types simplified
         assert_eq!(tree.get("textAlignVertical").unwrap().as_str(), Some("TOP"));
         assert_eq!(
             tree.get("textAutoResize").unwrap().as_str(),
@@ -320,7 +313,6 @@ mod tests {
 
         simplify_enums(&mut tree).unwrap();
 
-        // All enums in array simplified
         assert_eq!(tree["paints"][0]["type"].as_str(), Some("SOLID"));
         assert_eq!(tree["paints"][1]["type"].as_str(), Some("IMAGE"));
     }

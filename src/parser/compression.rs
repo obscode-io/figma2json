@@ -63,7 +63,6 @@ pub fn is_already_compressed(bytes: &[u8]) -> bool {
 /// assert_eq!(decompress_chunk(&compressed).unwrap(), b"fig-kiwi");
 /// ```
 pub fn decompress_chunk(bytes: &[u8]) -> Result<Vec<u8>> {
-    // Skip decompression for already compressed images
     if is_already_compressed(bytes) {
         return Ok(bytes.to_vec());
     }
@@ -93,21 +92,18 @@ mod tests {
 
     #[test]
     fn test_is_already_compressed_png() {
-        // PNG magic: [137, 80, 78, 71, ...]
         let png_data = vec![137, 80, 78, 71, 13, 10, 26, 10];
         assert!(is_already_compressed(&png_data));
     }
 
     #[test]
     fn test_is_already_compressed_jpeg() {
-        // JPEG magic: [255, 216, ...]
         let jpeg_data = vec![255, 216, 255, 224, 0, 16];
         assert!(is_already_compressed(&jpeg_data));
     }
 
     #[test]
     fn test_is_not_compressed() {
-        // Random data
         let data = vec![120, 156, 1, 2, 3, 4, 5];
         assert!(!is_already_compressed(&data));
     }
@@ -120,35 +116,28 @@ mod tests {
 
     #[test]
     fn test_decompress_deflate() {
-        // Create test data
         let original = b"Hello, Figma! This is a test string for compression.";
 
-        // Compress with raw DEFLATE (no zlib wrapper)
         let mut encoder = DeflateEncoder::new(Vec::new(), Compression::default());
         encoder.write_all(original).unwrap();
         let compressed = encoder.finish().unwrap();
 
-        // Decompress
         let decompressed = decompress_chunk(&compressed).unwrap();
         assert_eq!(decompressed, original);
     }
 
     #[test]
     fn test_decompress_zstd() {
-        // Create test data
         let original = b"Hello, Figma! This is a test string for Zstandard compression.";
 
-        // Compress with Zstandard
         let compressed = zstd::encode_all(&original[..], 3).unwrap();
 
-        // Decompress
         let decompressed = decompress_chunk(&compressed).unwrap();
         assert_eq!(decompressed, original);
     }
 
     #[test]
     fn test_decompress_already_compressed_png() {
-        // PNG data should be returned as-is
         let png_data = vec![137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3, 4];
         let result = decompress_chunk(&png_data).unwrap();
         assert_eq!(result, png_data);
@@ -156,7 +145,6 @@ mod tests {
 
     #[test]
     fn test_decompress_already_compressed_jpeg() {
-        // JPEG data should be returned as-is
         let jpeg_data = vec![255, 216, 255, 224, 0, 16, 1, 2, 3];
         let result = decompress_chunk(&jpeg_data).unwrap();
         assert_eq!(result, jpeg_data);
@@ -164,7 +152,6 @@ mod tests {
 
     #[test]
     fn test_decompress_invalid_data() {
-        // Invalid compressed data should fail
         let invalid_data = vec![1, 2, 3, 4, 5];
         let result = decompress_chunk(&invalid_data);
         assert!(result.is_err());

@@ -43,7 +43,6 @@ pub fn substitute_blobs(tree: &mut JsonValue, blobs: &[JsonValue]) -> Result<()>
 fn substitute_blobs_recursive(value: &mut JsonValue, blobs: &[JsonValue]) -> Result<()> {
     match value {
         JsonValue::Object(map) => {
-            // Collect blob fields to replace (can't modify map while iterating)
             let mut replacements = Vec::new();
 
             for (key, val) in map.iter() {
@@ -61,26 +60,21 @@ fn substitute_blobs_recursive(value: &mut JsonValue, blobs: &[JsonValue]) -> Res
                 }
             }
 
-            // Apply replacements
             for (old_key, new_key, new_value) in replacements {
                 map.remove(&old_key);
                 map.insert(new_key, new_value);
             }
 
-            // Recurse into all values
             for val in map.values_mut() {
                 substitute_blobs_recursive(val, blobs)?;
             }
         }
         JsonValue::Array(arr) => {
-            // Recurse into array elements
             for val in arr.iter_mut() {
                 substitute_blobs_recursive(val, blobs)?;
             }
         }
-        _ => {
-            // Primitives - nothing to do
-        }
+        _ => {}
     }
 
     Ok(())
@@ -93,12 +87,11 @@ mod tests {
 
     #[test]
     fn test_substitute_commands_blob() {
-        // Create a simple commands blob (M 10 20 Z)
         let mut blob_bytes = Vec::new();
-        blob_bytes.push(1); // M
+        blob_bytes.push(1);
         blob_bytes.extend_from_slice(&10.0f32.to_le_bytes());
         blob_bytes.extend_from_slice(&20.0f32.to_le_bytes());
-        blob_bytes.push(0); // Z
+        blob_bytes.push(0);
 
         let blobs = vec![json!({
             "bytes": blob_bytes
@@ -111,7 +104,6 @@ mod tests {
 
         substitute_blobs(&mut tree, &blobs).unwrap();
 
-        // Check that commandsBlob was replaced with commands
         assert!(tree.get("commandsBlob").is_none());
         assert!(tree.get("commands").is_some());
 
@@ -124,30 +116,26 @@ mod tests {
 
     #[test]
     fn test_substitute_vector_network_blob() {
-        // Create a simple vector network blob (2 vertices, 1 segment, 0 regions)
         let mut blob_bytes = Vec::new();
-        blob_bytes.extend_from_slice(&2u32.to_le_bytes()); // 2 vertices
-        blob_bytes.extend_from_slice(&1u32.to_le_bytes()); // 1 segment
-        blob_bytes.extend_from_slice(&0u32.to_le_bytes()); // 0 regions
+        blob_bytes.extend_from_slice(&2u32.to_le_bytes());
+        blob_bytes.extend_from_slice(&1u32.to_le_bytes());
+        blob_bytes.extend_from_slice(&0u32.to_le_bytes());
 
-        // Vertex 0
-        blob_bytes.extend_from_slice(&0u32.to_le_bytes()); // styleID
-        blob_bytes.extend_from_slice(&10.0f32.to_le_bytes()); // x
-        blob_bytes.extend_from_slice(&20.0f32.to_le_bytes()); // y
+        blob_bytes.extend_from_slice(&0u32.to_le_bytes());
+        blob_bytes.extend_from_slice(&10.0f32.to_le_bytes());
+        blob_bytes.extend_from_slice(&20.0f32.to_le_bytes());
 
-        // Vertex 1
         blob_bytes.extend_from_slice(&0u32.to_le_bytes());
         blob_bytes.extend_from_slice(&30.0f32.to_le_bytes());
         blob_bytes.extend_from_slice(&40.0f32.to_le_bytes());
 
-        // Segment 0
-        blob_bytes.extend_from_slice(&0u32.to_le_bytes()); // styleID
-        blob_bytes.extend_from_slice(&0u32.to_le_bytes()); // start vertex
-        blob_bytes.extend_from_slice(&0.0f32.to_le_bytes()); // start dx
-        blob_bytes.extend_from_slice(&0.0f32.to_le_bytes()); // start dy
-        blob_bytes.extend_from_slice(&1u32.to_le_bytes()); // end vertex
-        blob_bytes.extend_from_slice(&0.0f32.to_le_bytes()); // end dx
-        blob_bytes.extend_from_slice(&0.0f32.to_le_bytes()); // end dy
+        blob_bytes.extend_from_slice(&0u32.to_le_bytes());
+        blob_bytes.extend_from_slice(&0u32.to_le_bytes());
+        blob_bytes.extend_from_slice(&0.0f32.to_le_bytes());
+        blob_bytes.extend_from_slice(&0.0f32.to_le_bytes());
+        blob_bytes.extend_from_slice(&1u32.to_le_bytes());
+        blob_bytes.extend_from_slice(&0.0f32.to_le_bytes());
+        blob_bytes.extend_from_slice(&0.0f32.to_le_bytes());
 
         let blobs = vec![json!({
             "bytes": blob_bytes
@@ -160,7 +148,6 @@ mod tests {
 
         substitute_blobs(&mut tree, &blobs).unwrap();
 
-        // Check that vectorNetworkBlob was replaced with vectorNetwork
         assert!(tree.get("vectorNetworkBlob").is_none());
         assert!(tree.get("vectorNetwork").is_some());
 
@@ -175,12 +162,11 @@ mod tests {
 
     #[test]
     fn test_substitute_nested_tree() {
-        // Create a commands blob
         let mut blob_bytes = Vec::new();
-        blob_bytes.push(1); // M
+        blob_bytes.push(1);
         blob_bytes.extend_from_slice(&5.0f32.to_le_bytes());
         blob_bytes.extend_from_slice(&10.0f32.to_le_bytes());
-        blob_bytes.push(0); // Z
+        blob_bytes.push(0);
 
         let blobs = vec![json!({
             "bytes": blob_bytes
@@ -207,7 +193,6 @@ mod tests {
 
         substitute_blobs(&mut tree, &blobs).unwrap();
 
-        // Check that all commandsBlob references were replaced
         let child1 = &tree["children"][0];
         assert!(child1.get("commandsBlob").is_none());
         assert!(child1.get("commands").is_some());
@@ -219,20 +204,19 @@ mod tests {
 
     #[test]
     fn test_substitute_multiple_blob_types() {
-        // Create both commands and vectorNetwork blobs
         let mut commands_bytes = Vec::new();
-        commands_bytes.push(1); // M
+        commands_bytes.push(1);
         commands_bytes.extend_from_slice(&1.0f32.to_le_bytes());
         commands_bytes.extend_from_slice(&2.0f32.to_le_bytes());
-        commands_bytes.push(0); // Z
+        commands_bytes.push(0);
 
         let mut network_bytes = Vec::new();
-        network_bytes.extend_from_slice(&1u32.to_le_bytes()); // 1 vertex
-        network_bytes.extend_from_slice(&0u32.to_le_bytes()); // 0 segments
-        network_bytes.extend_from_slice(&0u32.to_le_bytes()); // 0 regions
-        network_bytes.extend_from_slice(&0u32.to_le_bytes()); // vertex styleID
-        network_bytes.extend_from_slice(&5.0f32.to_le_bytes()); // vertex x
-        network_bytes.extend_from_slice(&5.0f32.to_le_bytes()); // vertex y
+        network_bytes.extend_from_slice(&1u32.to_le_bytes());
+        network_bytes.extend_from_slice(&0u32.to_le_bytes());
+        network_bytes.extend_from_slice(&0u32.to_le_bytes());
+        network_bytes.extend_from_slice(&0u32.to_le_bytes());
+        network_bytes.extend_from_slice(&5.0f32.to_le_bytes());
+        network_bytes.extend_from_slice(&5.0f32.to_le_bytes());
 
         let blobs = vec![
             json!({"bytes": commands_bytes}),
@@ -247,7 +231,6 @@ mod tests {
 
         substitute_blobs(&mut tree, &blobs).unwrap();
 
-        // Both blob fields should be replaced
         assert!(tree.get("commandsBlob").is_none());
         assert!(tree.get("vectorNetworkBlob").is_none());
         assert!(tree.get("commands").is_some());
@@ -265,10 +248,8 @@ mod tests {
             "unknownBlob": 0
         });
 
-        // Should not fail, just leave the field as-is
         substitute_blobs(&mut tree, &blobs).unwrap();
 
-        // Unknown blob type should remain unchanged
         assert!(tree.get("unknownBlob").is_some());
         assert_eq!(tree.get("unknownBlob").unwrap().as_u64(), Some(0));
     }
@@ -281,20 +262,18 @@ mod tests {
 
         let mut tree = json!({
             "name": "Node",
-            "commandsBlob": 999  // Out of range
+            "commandsBlob": 999
         });
 
-        // Should not fail, just leave the field as-is
         substitute_blobs(&mut tree, &blobs).unwrap();
 
-        // Out of range index should remain unchanged
         assert!(tree.get("commandsBlob").is_some());
         assert_eq!(tree.get("commandsBlob").unwrap().as_u64(), Some(999));
     }
 
     #[test]
     fn test_substitute_preserves_other_fields() {
-        let blob_bytes = vec![0]; // Z
+        let blob_bytes = vec![0];
 
         let blobs = vec![json!({
             "bytes": blob_bytes
@@ -311,14 +290,12 @@ mod tests {
 
         substitute_blobs(&mut tree, &blobs).unwrap();
 
-        // Other fields should be preserved
         assert_eq!(tree.get("name").unwrap().as_str(), Some("Node"));
         assert_eq!(tree.get("type").unwrap().as_str(), Some("VECTOR"));
         assert_eq!(tree.get("visible").unwrap().as_bool(), Some(true));
         assert_eq!(tree.get("x").unwrap().as_i64(), Some(10));
         assert_eq!(tree.get("y").unwrap().as_i64(), Some(20));
 
-        // commandsBlob should be replaced
         assert!(tree.get("commandsBlob").is_none());
         assert!(tree.get("commands").is_some());
     }

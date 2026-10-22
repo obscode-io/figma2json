@@ -34,8 +34,6 @@ use serde_json::Value as JsonValue;
 /// // tree now has "color": "#df1010"
 /// ```
 pub fn transform_colors_to_css(tree: &mut JsonValue) -> Result<()> {
-    // Color objects are replaced by strings before the walk reaches them,
-    // so their r/g/b/a fields are never visited.
     for_each_object_mut(tree, &mut |map| {
         for value in map.values_mut() {
             let css = value
@@ -67,28 +65,20 @@ fn is_color_object(obj: &serde_json::Map<String, JsonValue>) -> bool {
 /// * `Some(String)` - The CSS hex color string
 /// * `None` - If any required field is missing or not a valid f64
 fn convert_color_to_css(obj: &serde_json::Map<String, JsonValue>) -> Option<String> {
-    // Extract r, g, b values (required)
     let r = obj.get("r")?.as_f64()?;
     let g = obj.get("g")?.as_f64()?;
     let b = obj.get("b")?.as_f64()?;
 
-    // Extract alpha value (optional, defaults to 1.0)
     let a = obj.get("a").and_then(|v| v.as_f64()).unwrap_or(1.0);
 
-    // Convert 0.0-1.0 range to 0-255 range
     let r_byte = float_to_byte(r);
     let g_byte = float_to_byte(g);
     let b_byte = float_to_byte(b);
     let a_byte = float_to_byte(a);
 
-    // Format as hex string
-    // Use #rrggbb format when alpha is 1.0 (fully opaque)
-    // Use #rrggbbaa format when alpha is not 1.0
     if (a - 1.0).abs() < 0.001 {
-        // Alpha is approximately 1.0, use 6-character format
         Some(format!("#{:02x}{:02x}{:02x}", r_byte, g_byte, b_byte))
     } else {
-        // Alpha is not 1.0, include it in 8-character format
         Some(format!(
             "#{:02x}{:02x}{:02x}{:02x}",
             r_byte, g_byte, b_byte, a_byte
@@ -114,14 +104,14 @@ mod tests {
         assert_eq!(float_to_byte(0.0), 0);
         assert_eq!(float_to_byte(1.0), 255);
         assert_eq!(float_to_byte(0.5), 128);
-        assert_eq!(float_to_byte(0.8725961446762085), 223); // From example
+        assert_eq!(float_to_byte(0.8725961446762085), 223);
         assert_eq!(float_to_byte(0.06292760372161865), 16);
     }
 
     #[test]
     fn test_float_to_byte_clamping() {
-        assert_eq!(float_to_byte(-0.5), 0); // Negative clamped to 0
-        assert_eq!(float_to_byte(1.5), 255); // Over 1.0 clamped to 255
+        assert_eq!(float_to_byte(-0.5), 0);
+        assert_eq!(float_to_byte(1.5), 255);
     }
 
     #[test]
@@ -350,14 +340,11 @@ mod tests {
 
         transform_colors_to_css(&mut tree).unwrap();
 
-        // Color should be transformed
         assert_eq!(tree.get("color").unwrap().as_str(), Some("#ff0000"));
 
-        // Position should be unchanged
         assert_eq!(tree["position"]["x"].as_i64(), Some(10));
         assert_eq!(tree["position"]["y"].as_i64(), Some(20));
 
-        // Name should be unchanged
         assert_eq!(tree.get("name").unwrap().as_str(), Some("Rectangle"));
     }
 
@@ -394,8 +381,6 @@ mod tests {
 
     #[test]
     fn test_only_object_values_are_converted() {
-        // Colors are only converted when they are the value of an object key;
-        // the root and bare array elements are left as objects.
         let color = json!({"r": 1.0, "g": 0.0, "b": 0.0});
         let mut tree = json!({"r": 1.0, "g": 0.0, "b": 0.0, "list": [color.clone()]});
         transform_colors_to_css(&mut tree).unwrap();

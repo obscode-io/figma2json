@@ -93,7 +93,6 @@ mod tests {
         remove_internal_only_nodes(&mut tree).unwrap();
 
         let children = tree.get("children").unwrap().as_array().unwrap();
-        // All nodes without internalOnly should be preserved
         assert_eq!(children.len(), 3);
     }
 
@@ -128,7 +127,6 @@ mod tests {
         remove_internal_only_nodes(&mut tree).unwrap();
 
         let children = tree.get("children").unwrap().as_array().unwrap();
-        // All nodes removed, empty array
         assert_eq!(children.len(), 0);
     }
 
@@ -144,7 +142,6 @@ mod tests {
         remove_internal_only_nodes(&mut tree).unwrap();
 
         let children = tree.get("children").unwrap().as_array().unwrap();
-        // All nodes preserved
         assert_eq!(children.len(), 2);
     }
 
@@ -206,10 +203,8 @@ mod tests {
         remove_internal_only_nodes(&mut tree).unwrap();
 
         let children = tree.get("children").unwrap().as_array().unwrap();
-        // Only internalOnly: true should be filtered
         assert_eq!(children.len(), 1);
         assert_eq!(children[0]["name"].as_str(), Some("Node1"));
-        // internalOnly field should be removed from kept nodes
         assert!(children[0].get("internalOnly").is_none());
     }
 
@@ -223,7 +218,6 @@ mod tests {
 
         remove_internal_only_nodes(&mut tree).unwrap();
 
-        // internalOnly field should be removed even if false
         assert!(tree.get("internalOnly").is_none());
         assert_eq!(tree.get("name").unwrap().as_str(), Some("Node"));
         assert_eq!(tree.get("visible").unwrap().as_bool(), Some(true));
@@ -238,7 +232,6 @@ mod tests {
         remove_internal_only_nodes(&mut tree).unwrap();
 
         let data = tree.get("data").unwrap().as_array().unwrap();
-        // Non-object elements should be preserved
         assert_eq!(data.len(), 4);
     }
 }

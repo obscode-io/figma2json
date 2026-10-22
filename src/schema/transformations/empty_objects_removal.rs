@@ -211,13 +211,11 @@ mod tests {
         let original = tree.clone();
         remove_empty_objects(&mut tree).unwrap();
 
-        // Tree should be unchanged
         assert_eq!(tree, original);
     }
 
     #[test]
     fn test_derived_symbol_data_case() {
-        // Real-world example from roles-members.json
         let mut tree = json!({
             "derivedSymbolData": [
                 {},
@@ -243,7 +241,6 @@ mod tests {
 
     #[test]
     fn test_symbol_overrides_case() {
-        // Another real-world pattern
         let mut tree = json!({
             "symbolOverrides": [
                 {
@@ -275,7 +272,6 @@ mod tests {
 
         remove_empty_objects(&mut tree).unwrap();
 
-        // Empty arrays should be preserved, only empty objects are removed
         assert!(tree.get("items").is_some());
         let items = tree.get("items").unwrap().as_array().unwrap();
         assert_eq!(items.len(), 0);
@@ -292,8 +288,6 @@ mod tests {
 
         remove_empty_objects(&mut tree).unwrap();
 
-        // After removing empty children, parent becomes empty and is also removed
-        // This is the correct behavior - recursively remove all empty objects
         assert!(tree.get("parent").is_none());
     }
 }

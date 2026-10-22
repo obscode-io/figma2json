@@ -19,7 +19,7 @@ pub fn parse_blob(blob_type: &str, blob: &JsonValue) -> Result<Option<JsonValue>
     let parse: fn(&[u8]) -> Option<JsonValue> = match blob_type {
         "commands" => parse_commands,
         "vectorNetwork" => parse_vector_network,
-        _ => return Ok(None), // Unknown blob type
+        _ => return Ok(None),
     };
     Ok(parse(&extract_blob_bytes(blob)?))
 }
@@ -134,7 +134,7 @@ pub fn parse_commands(bytes: &[u8]) -> Option<JsonValue> {
             2 => ("L", 2),
             3 => ("Q", 4),
             4 => ("C", 6),
-            _ => return None, // Unknown command type
+            _ => return None,
         };
         commands.push(JsonValue::String(command.to_string()));
         for _ in 0..coordinates {
@@ -179,8 +179,6 @@ pub fn parse_vector_network(bytes: &[u8]) -> Option<JsonValue> {
     let segment_count = reader.count()?;
     let region_count = reader.count()?;
 
-    // The counts come from the file, so the vectors grow as data is actually read
-    // instead of being allocated up front from them.
     let mut vertices = Vec::new();
     for _ in 0..vertex_count {
         let style_id = reader.u32()?;
@@ -227,7 +225,6 @@ pub fn parse_vector_network(bytes: &[u8]) -> Option<JsonValue> {
 
     let mut regions = Vec::new();
     for _ in 0..region_count {
-        // styleID and winding rule are packed into one u32
         let style_and_rule = reader.u32()?;
         let winding_rule = if style_and_rule & 1 != 0 {
             "NONZERO"
@@ -240,7 +237,6 @@ pub fn parse_vector_network(bytes: &[u8]) -> Option<JsonValue> {
         let mut loops = Vec::new();
         for _ in 0..loop_count {
             let index_count = reader.count()?;
-            // Reject a count larger than the remaining data before reading any index
             if index_count > reader.remaining() / 4 {
                 return None;
             }
@@ -280,15 +276,14 @@ mod tests {
 
     #[test]
     fn test_parse_commands_simple_path() {
-        // M 10 20 L 30 40 Z
         let mut bytes = Vec::new();
-        bytes.push(1); // M
+        bytes.push(1);
         bytes.extend_from_slice(&10.0f32.to_le_bytes());
         bytes.extend_from_slice(&20.0f32.to_le_bytes());
-        bytes.push(2); // L
+        bytes.push(2);
         bytes.extend_from_slice(&30.0f32.to_le_bytes());
         bytes.extend_from_slice(&40.0f32.to_le_bytes());
-        bytes.push(0); // Z
+        bytes.push(0);
 
         let result = parse_commands(&bytes).unwrap();
         let arr = result.as_array().unwrap();
@@ -305,9 +300,8 @@ mod tests {
 
     #[test]
     fn test_parse_commands_quadratic() {
-        // Q 1 2 3 4
         let mut bytes = Vec::new();
-        bytes.push(3); // Q
+        bytes.push(3);
         bytes.extend_from_slice(&1.0f32.to_le_bytes());
         bytes.extend_from_slice(&2.0f32.to_le_bytes());
         bytes.extend_from_slice(&3.0f32.to_le_bytes());
@@ -326,9 +320,8 @@ mod tests {
 
     #[test]
     fn test_parse_commands_cubic() {
-        // C 1 2 3 4 5 6
         let mut bytes = Vec::new();
-        bytes.push(4); // C
+        bytes.push(4);
         bytes.extend_from_slice(&1.0f32.to_le_bytes());
         bytes.extend_from_slice(&2.0f32.to_le_bytes());
         bytes.extend_from_slice(&3.0f32.to_le_bytes());
@@ -351,12 +344,10 @@ mod tests {
 
     #[test]
     fn test_parse_commands_invalid() {
-        // Invalid command type
         let bytes = vec![99];
         assert!(parse_commands(&bytes).is_none());
 
-        // Incomplete data
-        let bytes = vec![1, 0]; // M with incomplete coordinates
+        let bytes = vec![1, 0];
         assert!(parse_commands(&bytes).is_none());
     }
 
@@ -364,22 +355,18 @@ mod tests {
     fn test_parse_vector_network_simple() {
         let mut bytes = Vec::new();
 
-        // Header: 2 vertices, 1 segment, 0 regions
         bytes.extend_from_slice(&2u32.to_le_bytes());
         bytes.extend_from_slice(&1u32.to_le_bytes());
         bytes.extend_from_slice(&0u32.to_le_bytes());
 
-        // Vertex 0: styleID=0, x=10, y=20
         bytes.extend_from_slice(&0u32.to_le_bytes());
         bytes.extend_from_slice(&10.0f32.to_le_bytes());
         bytes.extend_from_slice(&20.0f32.to_le_bytes());
 
-        // Vertex 1: styleID=0, x=30, y=40
         bytes.extend_from_slice(&0u32.to_le_bytes());
         bytes.extend_from_slice(&30.0f32.to_le_bytes());
         bytes.extend_from_slice(&40.0f32.to_le_bytes());
 
-        // Segment 0: styleID=0, start=(vertex=0, dx=0, dy=0), end=(vertex=1, dx=0, dy=0)
         bytes.extend_from_slice(&0u32.to_le_bytes());
         bytes.extend_from_slice(&0u32.to_le_bytes());
         bytes.extend_from_slice(&0.0f32.to_le_bytes());

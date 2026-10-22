@@ -69,7 +69,6 @@ fn has_matrix_fields(obj: &Map<String, JsonValue>) -> bool {
 /// - scaleY: only if not ~1.0
 /// - skewX: only if not ~0.0
 fn extract_and_decompose_matrix(obj: &Map<String, JsonValue>) -> Option<JsonValue> {
-    // Extract matrix components
     let m00 = obj.get("m00")?.as_f64()?;
     let m01 = obj.get("m01")?.as_f64()?;
     let m02 = obj.get("m02")?.as_f64()?;
@@ -77,17 +76,13 @@ fn extract_and_decompose_matrix(obj: &Map<String, JsonValue>) -> Option<JsonValu
     let m11 = obj.get("m11")?.as_f64()?;
     let m12 = obj.get("m12")?.as_f64()?;
 
-    // Decompose matrix into CSS properties
     let css = decompose_matrix(m00, m01, m02, m10, m11, m12);
 
-    // Build result object, only including non-default values
     let mut result = Map::new();
 
-    // Always include x and y
     result.insert("x".to_owned(), json!(css.x));
     result.insert("y".to_owned(), json!(css.y));
 
-    // Only include non-default values (using tolerance for float comparison)
     const EPSILON: f64 = 1e-10;
 
     if css.rotation.abs() > EPSILON {
@@ -114,10 +109,12 @@ fn extract_and_decompose_matrix(obj: &Map<String, JsonValue>) -> Option<JsonValu
 struct CssTransform {
     x: f64,
     y: f64,
-    rotation: f64, // in degrees
+    /// Rotation in degrees.
+    rotation: f64,
     scale_x: f64,
     scale_y: f64,
-    skew_x: f64, // in degrees
+    /// Horizontal skew in degrees.
+    skew_x: f64,
 }
 
 /// Decompose a 2D affine transformation matrix into CSS properties
@@ -134,31 +131,21 @@ struct CssTransform {
 /// 4. Compute scale_y from the determinant divided by scale_x
 /// 5. Compute skew_x from the dot product of columns
 fn decompose_matrix(m00: f64, m01: f64, m02: f64, m10: f64, m11: f64, m12: f64) -> CssTransform {
-    // Translation is straightforward
     let x = m02;
     let y = m12;
 
-    // Compute scale_x as the magnitude of the first column vector [m00, m10]
     let scale_x = (m00 * m00 + m10 * m10).sqrt();
 
-    // Compute rotation from the angle of the first column vector
-    // atan2(m10, m00) gives us the rotation in radians
     let rotation_rad = m10.atan2(m00);
     let rotation = rotation_rad * (180.0 / PI);
 
-    // Compute scale_y from the determinant
-    // det = m00*m11 - m01*m10
-    // scale_y = det / scale_x
     let determinant = m00 * m11 - m01 * m10;
     let scale_y = if scale_x.abs() > 1e-10 {
         determinant / scale_x
     } else {
-        // If scale_x is near zero, use the magnitude of the second column
         (m01 * m01 + m11 * m11).sqrt()
     };
 
-    // Compute skew_x from the dot product of the column vectors
-    // skew = atan((m00*m01 + m10*m11) / (m00^2 + m10^2))
     let skew_x_rad = if scale_x.abs() > 1e-10 {
         let dot_product = m00 * m01 + m10 * m11;
         let scale_x_squared = m00 * m00 + m10 * m10;
@@ -183,7 +170,6 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    // Helper function to compare floats with tolerance
     fn approx_eq(a: f64, b: f64, epsilon: f64) -> bool {
         (a - b).abs() < epsilon
     }
@@ -206,7 +192,6 @@ mod tests {
         let transform = tree.get("transform").unwrap();
         assert!(approx_eq(transform["x"].as_f64().unwrap(), 0.0, 1e-10));
         assert!(approx_eq(transform["y"].as_f64().unwrap(), 0.0, 1e-10));
-        // Default values should not be present
         assert!(transform.get("rotation").is_none());
         assert!(transform.get("scaleX").is_none());
         assert!(transform.get("scaleY").is_none());
@@ -231,7 +216,6 @@ mod tests {
         let transform = tree.get("transform").unwrap();
         assert!(approx_eq(transform["x"].as_f64().unwrap(), 100.0, 1e-10));
         assert!(approx_eq(transform["y"].as_f64().unwrap(), 50.0, 1e-10));
-        // Default values should not be present
         assert!(transform.get("rotation").is_none());
         assert!(transform.get("scaleX").is_none());
         assert!(transform.get("scaleY").is_none());
@@ -258,14 +242,12 @@ mod tests {
         assert!(approx_eq(transform["y"].as_f64().unwrap(), 0.0, 1e-10));
         assert!(approx_eq(transform["scaleX"].as_f64().unwrap(), 2.0, 1e-10));
         assert!(approx_eq(transform["scaleY"].as_f64().unwrap(), 3.0, 1e-10));
-        // Default rotation and skew should not be present
         assert!(transform.get("rotation").is_none());
         assert!(transform.get("skewX").is_none());
     }
 
     #[test]
     fn test_pure_rotation_45_degrees() {
-        // 45 degree rotation: cos(45°) ≈ 0.7071, sin(45°) ≈ 0.7071
         let cos45 = std::f64::consts::FRAC_1_SQRT_2;
         let sin45 = std::f64::consts::FRAC_1_SQRT_2;
 
@@ -290,7 +272,6 @@ mod tests {
             45.0,
             1e-8
         ));
-        // Default scale and skew should not be present
         assert!(transform.get("scaleX").is_none());
         assert!(transform.get("scaleY").is_none());
         assert!(transform.get("skewX").is_none());
@@ -298,7 +279,6 @@ mod tests {
 
     #[test]
     fn test_pure_rotation_90_degrees() {
-        // 90 degree rotation: cos(90°) = 0, sin(90°) = 1
         let mut tree = json!({
             "transform": {
                 "m00": 0.0,
@@ -320,7 +300,6 @@ mod tests {
             90.0,
             1e-8
         ));
-        // Default scale and skew should not be present
         assert!(transform.get("scaleX").is_none());
         assert!(transform.get("scaleY").is_none());
         assert!(transform.get("skewX").is_none());
@@ -328,7 +307,6 @@ mod tests {
 
     #[test]
     fn test_combined_translation_scale_rotation() {
-        // 30 degree rotation with scale 2x, 3y, translated by (100, 50)
         let angle = 30.0 * PI / 180.0;
         let cos_a = angle.cos();
         let sin_a = angle.sin();
@@ -358,7 +336,6 @@ mod tests {
         ));
         assert!(approx_eq(transform["scaleX"].as_f64().unwrap(), 2.0, 1e-10));
         assert!(approx_eq(transform["scaleY"].as_f64().unwrap(), 3.0, 1e-10));
-        // Default skew should not be present
         assert!(transform.get("skewX").is_none());
     }
 
@@ -391,7 +368,6 @@ mod tests {
 
         transform_matrix_to_css(&mut tree).unwrap();
 
-        // Check root transform (only translation, should only have x and y)
         let root_transform = tree.get("transform").unwrap();
         assert!(approx_eq(
             root_transform["x"].as_f64().unwrap(),
@@ -408,7 +384,6 @@ mod tests {
         assert!(root_transform.get("scaleY").is_none());
         assert!(root_transform.get("skewX").is_none());
 
-        // Check child transform (has scale, should have x, y, scaleX, scaleY)
         let child_transform = &tree["children"][0]["transform"];
         assert!(approx_eq(
             child_transform["x"].as_f64().unwrap(),
@@ -447,7 +422,6 @@ mod tests {
         let original = tree.clone();
         transform_matrix_to_css(&mut tree).unwrap();
 
-        // Should remain unchanged
         assert_eq!(tree, original);
     }
 
@@ -463,13 +437,11 @@ mod tests {
         let original = tree.clone();
         transform_matrix_to_css(&mut tree).unwrap();
 
-        // Should remain unchanged since it doesn't have matrix fields
         assert_eq!(tree, original);
     }
 
     #[test]
     fn test_negative_scale() {
-        // Negative scale (reflection)
         let mut tree = json!({
             "transform": {
                 "m00": -1.0,
@@ -484,10 +456,8 @@ mod tests {
         transform_matrix_to_css(&mut tree).unwrap();
 
         let transform = tree.get("transform").unwrap();
-        // x and y should be present
         assert!(approx_eq(transform["x"].as_f64().unwrap(), 0.0, 1e-10));
         assert!(approx_eq(transform["y"].as_f64().unwrap(), 0.0, 1e-10));
-        // scaleX should be 1.0 (magnitude), rotation should be 180 degrees
         assert!(approx_eq(
             transform["rotation"].as_f64().unwrap(),
             180.0,
@@ -498,14 +468,12 @@ mod tests {
             -1.0,
             1e-10
         ));
-        // scaleX is 1.0 (default) so should not be present
         assert!(transform.get("scaleX").is_none());
         assert!(transform.get("skewX").is_none());
     }
 
     #[test]
     fn test_real_world_example() {
-        // From the actual example.canvas.fig: translate(248, -7)
         let mut tree = json!({
             "transform": {
                 "m00": 1.0,
@@ -522,7 +490,6 @@ mod tests {
         let transform = tree.get("transform").unwrap();
         assert!(approx_eq(transform["x"].as_f64().unwrap(), 248.0, 1e-10));
         assert!(approx_eq(transform["y"].as_f64().unwrap(), -7.0, 1e-10));
-        // Default values should not be present
         assert!(transform.get("rotation").is_none());
         assert!(transform.get("scaleX").is_none());
         assert!(transform.get("scaleY").is_none());

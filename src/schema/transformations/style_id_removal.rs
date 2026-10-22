@@ -233,11 +233,9 @@ mod tests {
 
         remove_style_ids(&mut tree).unwrap();
 
-        // Style IDs removed
         assert!(tree.get("styleIdForFill").is_none());
         assert!(tree.get("styleIdForText").is_none());
 
-        // Actual style values preserved
         assert_eq!(tree.get("fontSize").unwrap().as_f64(), Some(14.0));
         assert!(tree.get("fillPaints").is_some());
         assert!(tree.get("fontName").is_some());

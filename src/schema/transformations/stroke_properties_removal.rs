@@ -162,7 +162,6 @@ mod tests {
 
         remove_stroke_properties(&mut tree).unwrap();
 
-        // Check first nested element
         assert!(tree["children"][0].get("strokeAlign").is_none());
         assert!(tree["children"][0].get("strokeWeight").is_none());
         assert_eq!(
@@ -170,7 +169,6 @@ mod tests {
             Some("Child1")
         );
 
-        // Check deeply nested element
         let deep_child = &tree["children"][1]["children"][0];
         assert!(deep_child.get("strokeJoin").is_none());
         assert_eq!(deep_child.get("name").unwrap().as_str(), Some("DeepChild"));
@@ -187,7 +185,6 @@ mod tests {
 
         remove_stroke_properties(&mut tree).unwrap();
 
-        // Tree without stroke properties should be unchanged
         assert_eq!(tree.get("name").unwrap().as_str(), Some("Rectangle"));
         assert_eq!(tree.get("width").unwrap().as_i64(), Some(100));
         assert_eq!(tree.get("height").unwrap().as_i64(), Some(200));
@@ -218,11 +215,9 @@ mod tests {
 
         remove_stroke_properties(&mut tree).unwrap();
 
-        // Stroke properties removed
         assert!(tree.get("strokeAlign").is_none());
         assert!(tree.get("strokeWeight").is_none());
 
-        // strokePaints preserved (contains actual stroke color data)
         assert!(tree.get("strokePaints").is_some());
         assert_eq!(tree["strokePaints"][0]["color"].as_str(), Some("#000000"));
     }
@@ -254,7 +249,6 @@ mod tests {
 
         remove_stroke_properties(&mut tree).unwrap();
 
-        // All stroke properties in array should be removed
         assert!(tree["items"][0].get("strokeAlign").is_none());
         assert_eq!(
             tree["items"][0].get("name").unwrap().as_str(),
@@ -299,7 +293,6 @@ mod tests {
 
         remove_stroke_properties(&mut tree).unwrap();
 
-        // All variations of strokeAlign should be removed
         assert!(tree["shape1"].get("strokeAlign").is_none());
         assert!(tree["shape2"].get("strokeAlign").is_none());
         assert!(tree["shape3"].get("strokeAlign").is_none());

@@ -116,7 +116,6 @@ mod tests {
 
         remove_background_properties(&mut tree).unwrap();
 
-        // backgroundColor should be preserved
         assert_eq!(
             tree.get("backgroundColor").unwrap().as_str(),
             Some("#ff0000")
@@ -136,7 +135,6 @@ mod tests {
 
         remove_background_properties(&mut tree).unwrap();
 
-        // Tree without background properties should be unchanged
         assert_eq!(tree.get("name").unwrap().as_str(), Some("Frame"));
         assert_eq!(tree.get("width").unwrap().as_i64(), Some(100));
         assert!(tree.get("backgroundEnabled").is_none());
@@ -162,7 +160,6 @@ mod tests {
 
         remove_background_properties(&mut tree).unwrap();
 
-        // Both nested background properties should be removed
         assert!(tree["children"][0].get("backgroundEnabled").is_none());
         assert_eq!(
             tree["children"][0]["backgroundColor"].as_str(),
@@ -211,7 +208,6 @@ mod tests {
 
         remove_background_properties(&mut tree).unwrap();
 
-        // Both should be removed regardless of value
         assert!(tree.get("backgroundEnabled").is_none());
         assert!(tree.get("backgroundOpacity").is_none());
         assert_eq!(

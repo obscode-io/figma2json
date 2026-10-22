@@ -72,7 +72,6 @@ mod tests {
 
         remove_default_rotation(&mut tree).unwrap();
 
-        // Non-zero rotation should be preserved
         assert_eq!(tree.get("rotation").unwrap().as_f64(), Some(45.0));
         assert_eq!(tree.get("name").unwrap().as_str(), Some("Image"));
     }
@@ -86,7 +85,6 @@ mod tests {
 
         remove_default_rotation(&mut tree).unwrap();
 
-        // Negative rotation should be preserved
         assert_eq!(tree.get("rotation").unwrap().as_f64(), Some(-30.0));
     }
 
@@ -101,7 +99,6 @@ mod tests {
 
             remove_default_rotation(&mut tree).unwrap();
 
-            // All non-zero rotations should be preserved
             assert_eq!(tree.get("rotation").unwrap().as_f64(), Some(rotation_value));
         }
     }
@@ -116,7 +113,6 @@ mod tests {
 
         remove_default_rotation(&mut tree).unwrap();
 
-        // Tree without rotation should be unchanged
         assert_eq!(tree.get("name").unwrap().as_str(), Some("Rectangle"));
         assert_eq!(tree.get("width").unwrap().as_i64(), Some(100));
         assert!(tree.get("rotation").is_none());
@@ -139,7 +135,6 @@ mod tests {
 
         remove_default_rotation(&mut tree).unwrap();
 
-        // rotation 0.0 should be removed
         assert!(tree["fillPaints"][0].get("rotation").is_none());
         assert_eq!(tree["fillPaints"][0]["scale"].as_f64(), Some(0.5));
     }
@@ -161,7 +156,6 @@ mod tests {
 
         remove_default_rotation(&mut tree).unwrap();
 
-        // rotation 0.0 should be removed from transform
         assert!(tree["fillPaints"][0]["transform"].get("rotation").is_none());
         assert_eq!(
             tree["fillPaints"][0]["transform"]["x"].as_f64(),
@@ -186,7 +180,6 @@ mod tests {
 
         remove_default_rotation(&mut tree).unwrap();
 
-        // rotation 0.0 removed, 15.0 preserved
         assert!(tree["children"][0].get("rotation").is_none());
         assert_eq!(tree["children"][0]["name"].as_str(), Some("Child1"));
 
@@ -215,7 +208,6 @@ mod tests {
 
         remove_default_rotation(&mut tree).unwrap();
 
-        // All rotation 0.0 should be removed at all levels
         let rect = &tree["document"]["children"][0];
         assert!(rect.get("rotation").is_none());
         assert!(rect["fillPaints"][0].get("rotation").is_none());
@@ -234,7 +226,6 @@ mod tests {
 
         remove_default_rotation(&mut tree).unwrap();
 
-        // All rotation 0.0 should be removed
         assert!(tree["children"][0].get("rotation").is_none());
         assert!(tree["children"][1].get("rotation").is_none());
         assert!(tree["children"][2].get("rotation").is_none());
@@ -252,7 +243,6 @@ mod tests {
 
         remove_default_rotation(&mut tree).unwrap();
 
-        // Integer 0 should also be removed (since 0 == 0.0)
         assert!(tree.get("rotation").is_none());
     }
 
@@ -265,7 +255,6 @@ mod tests {
 
         remove_default_rotation(&mut tree).unwrap();
 
-        // String rotation should not be touched
         assert_eq!(tree.get("rotation").unwrap().as_str(), Some("0.0"));
     }
 }

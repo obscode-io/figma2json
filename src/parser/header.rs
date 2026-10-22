@@ -110,15 +110,12 @@ mod tests {
 
     #[test]
     fn test_is_zip_container() {
-        // Valid ZIP signature
         let zip_bytes = b"PK\x03\x04";
         assert!(is_zip_container(zip_bytes));
 
-        // Not a ZIP
         let fig_bytes = b"fig-kiwi";
         assert!(!is_zip_container(fig_bytes));
 
-        // Too small
         let small_bytes = b"P";
         assert!(!is_zip_container(small_bytes));
     }

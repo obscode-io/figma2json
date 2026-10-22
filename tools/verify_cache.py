@@ -128,7 +128,6 @@ if os.path.isdir("admin"):
     comp_index = load("admin/components/index.json") or {}
     check_refs("admin", screens + comps, component_ids_in(comps), set(comp_index.get("notFound", [])))
 
-# SVG icons: every listed file exists and parses
 import xml.etree.ElementTree as ET
 for index in glob.glob("**/icons/index.json", recursive=True) + glob.glob("**/*-icons/index.json", recursive=True):
     base = os.path.dirname(os.path.dirname(index))

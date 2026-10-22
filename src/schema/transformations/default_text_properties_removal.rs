@@ -148,7 +148,6 @@ mod tests {
 
         remove_default_text_properties(&mut tree).unwrap();
 
-        // Non-default letterSpacing should be preserved
         assert!(tree.get("letterSpacing").is_some());
         assert_eq!(tree["letterSpacing"]["value"].as_f64(), Some(5.0));
     }
@@ -163,7 +162,6 @@ mod tests {
 
         remove_default_text_properties(&mut tree).unwrap();
 
-        // Non-default lineHeight should be preserved
         assert!(tree.get("lineHeight").is_some());
         assert_eq!(tree["lineHeight"]["value"].as_f64(), Some(120.0));
     }
@@ -179,7 +177,6 @@ mod tests {
 
         remove_default_text_properties(&mut tree).unwrap();
 
-        // Non-PERCENT units should be preserved even with default values
         assert!(tree.get("letterSpacing").is_some());
         assert!(tree.get("lineHeight").is_some());
     }
@@ -201,7 +198,6 @@ mod tests {
 
         remove_default_text_properties(&mut tree).unwrap();
 
-        // Both nested defaults should be removed
         assert!(tree["children"][0].get("letterSpacing").is_none());
         assert!(tree["children"][1].get("lineHeight").is_none());
     }
@@ -216,7 +212,6 @@ mod tests {
 
         remove_default_text_properties(&mut tree).unwrap();
 
-        // Tree without text properties should be unchanged
         assert_eq!(tree.get("name").unwrap().as_str(), Some("Rectangle"));
         assert_eq!(tree.get("width").unwrap().as_i64(), Some(100));
     }

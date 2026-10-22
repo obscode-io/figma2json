@@ -10,13 +10,11 @@ pub mod tree;
 pub use decoder::decode_fig_to_json;
 pub use tree::build_tree;
 
-// Design context and value conversions.
 pub use transformations::{
     add_design_context, simplify_enums, simplify_text_properties, transform_colors_to_css,
     transform_image_hashes, transform_matrix_to_css, DesignDefinitions,
 };
 
-// Removal passes.
 pub use transformations::{
     remove_background_properties, remove_border_weights, remove_constraint_properties,
     remove_corner_smoothing, remove_default_blend_mode, remove_default_opacity,

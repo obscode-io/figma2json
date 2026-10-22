@@ -38,10 +38,6 @@ use serde_json::Value as JsonValue;
 /// ```
 pub fn remove_redundant_padding(tree: &mut JsonValue) -> Result<()> {
     for_each_object_mut(tree, &mut |map| {
-        // stackHorizontalPadding is the LEFT padding and stackVerticalPadding the TOP
-        // padding; stackPaddingRight / stackPaddingBottom are the other sides. They
-        // are only redundant when they are equal, otherwise removing them loses
-        // asymmetric padding (e.g. 16px left / 8px right).
         for (side, axis) in PADDING_PAIRS {
             if map.contains_key(*side) && map.get(*side) == map.get(*axis) {
                 map.remove(*side);
@@ -245,7 +241,6 @@ mod tests {
 
     #[test]
     fn test_handles_different_padding_values() {
-        // Different values are asymmetric padding (left 20 / right 25): keep both
         let mut tree = json!({
             "name": "Button",
             "stackHorizontalPadding": 20.0,
@@ -298,7 +293,6 @@ mod tests {
         );
         assert!(tree.get("stackPaddingBottom").is_none());
 
-        // Other fields preserved
         assert_eq!(tree.get("name").unwrap().as_str(), Some("Button"));
         assert!(tree.get("cornerRadius").is_some());
         assert!(tree.get("stackMode").is_some());

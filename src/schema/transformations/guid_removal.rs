@@ -88,11 +88,9 @@ mod tests {
 
         remove_guid_fields(&mut tree).unwrap();
 
-        // Root guid should be removed
         assert!(tree.get("guid").is_none());
         assert_eq!(tree.get("name").unwrap().as_str(), Some("Root"));
 
-        // Children guids should be removed
         assert!(tree["children"][0].get("guid").is_none());
         assert_eq!(
             tree["children"][0].get("name").unwrap().as_str(),
@@ -136,14 +134,12 @@ mod tests {
 
         remove_guid_fields(&mut tree).unwrap();
 
-        // All guids should be removed at all levels
         assert!(tree["document"].get("guid").is_none());
         assert!(tree["document"]["children"][0].get("guid").is_none());
         assert!(tree["document"]["children"][0]["children"][0]
             .get("guid")
             .is_none());
 
-        // Other fields should be preserved
         assert_eq!(
             tree["document"]["children"][0]["children"][0]
                 .get("name")
@@ -164,7 +160,6 @@ mod tests {
 
         remove_guid_fields(&mut tree).unwrap();
 
-        // Tree without guid should be unchanged
         assert!(tree.get("guid").is_none());
         assert_eq!(tree.get("name").unwrap().as_str(), Some("Rectangle"));
         assert_eq!(tree.get("visible").unwrap().as_bool(), Some(true));
@@ -189,10 +184,8 @@ mod tests {
 
         remove_guid_fields(&mut tree).unwrap();
 
-        // Only guid should be removed
         assert!(tree.get("guid").is_none());
 
-        // All other fields preserved
         assert_eq!(tree.get("name").unwrap().as_str(), Some("Frame"));
         assert_eq!(tree.get("type").unwrap().as_str(), Some("FRAME"));
         assert_eq!(tree.get("opacity").unwrap().as_f64(), Some(1.0));
@@ -224,7 +217,6 @@ mod tests {
 
         remove_guid_fields(&mut tree).unwrap();
 
-        // All guids in array should be removed
         assert!(tree["items"][0].get("guid").is_none());
         assert_eq!(
             tree["items"][0].get("name").unwrap().as_str(),
@@ -263,14 +255,11 @@ mod tests {
 
         remove_guid_fields(&mut tree).unwrap();
 
-        // Root guid removed
         assert!(tree.get("guid").is_none());
 
-        // Properties object unchanged (no guid)
         assert_eq!(tree["properties"]["width"].as_i64(), Some(100));
         assert_eq!(tree["properties"]["height"].as_i64(), Some(200));
 
-        // Child guid removed
         assert!(tree["children"][0].get("guid").is_none());
         assert_eq!(
             tree["children"][0].get("name").unwrap().as_str(),
@@ -284,7 +273,6 @@ mod tests {
 
         remove_guid_fields(&mut tree).unwrap();
 
-        // Empty object should remain empty
         assert_eq!(tree.as_object().unwrap().len(), 0);
     }
 
@@ -294,7 +282,6 @@ mod tests {
 
         remove_guid_fields(&mut tree).unwrap();
 
-        // Primitive values should be unchanged
         assert_eq!(tree.as_str(), Some("string value"));
     }
 }

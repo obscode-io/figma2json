@@ -69,7 +69,6 @@ mod tests {
 
         remove_default_visible(&mut tree).unwrap();
 
-        // visible: false should be preserved
         assert_eq!(tree.get("visible").unwrap().as_bool(), Some(false));
         assert_eq!(tree.get("name").unwrap().as_str(), Some("Shape"));
     }
@@ -84,7 +83,6 @@ mod tests {
 
         remove_default_visible(&mut tree).unwrap();
 
-        // Tree without visible should be unchanged
         assert_eq!(tree.get("name").unwrap().as_str(), Some("Rectangle"));
         assert_eq!(tree.get("width").unwrap().as_i64(), Some(100));
         assert!(tree.get("visible").is_none());
@@ -107,7 +105,6 @@ mod tests {
 
         remove_default_visible(&mut tree).unwrap();
 
-        // visible: true removed, visible: false preserved
         assert!(tree["children"][0].get("visible").is_none());
         assert_eq!(tree["children"][0]["name"].as_str(), Some("Child1"));
 
@@ -134,11 +131,9 @@ mod tests {
 
         remove_default_visible(&mut tree).unwrap();
 
-        // visible: true removed from first paint
         assert!(tree["fillPaints"][0].get("visible").is_none());
         assert_eq!(tree["fillPaints"][0]["type"].as_str(), Some("SOLID"));
 
-        // visible: false preserved in second paint
         assert_eq!(tree["fillPaints"][1]["visible"].as_bool(), Some(false));
         assert_eq!(tree["fillPaints"][1]["type"].as_str(), Some("GRADIENT"));
     }
@@ -164,7 +159,6 @@ mod tests {
 
         remove_default_visible(&mut tree).unwrap();
 
-        // All visible: true should be removed at all levels
         let frame = &tree["document"]["children"][0];
         assert!(frame.get("visible").is_none());
         assert!(frame["fillPaints"][0].get("visible").is_none());
@@ -183,7 +177,6 @@ mod tests {
 
         remove_default_visible(&mut tree).unwrap();
 
-        // All visible: true should be removed
         assert!(tree["children"][0].get("visible").is_none());
         assert!(tree["children"][1].get("visible").is_none());
         assert!(tree["children"][2].get("visible").is_none());
@@ -204,7 +197,6 @@ mod tests {
 
         remove_default_visible(&mut tree).unwrap();
 
-        // All visible: false should be preserved
         assert_eq!(tree["children"][0]["visible"].as_bool(), Some(false));
         assert_eq!(tree["children"][1]["visible"].as_bool(), Some(false));
         assert_eq!(tree["children"][2]["visible"].as_bool(), Some(false));
@@ -226,7 +218,6 @@ mod tests {
 
         remove_default_visible(&mut tree).unwrap();
 
-        // true removed, false preserved
         assert!(tree["children"][0].get("visible").is_none());
         assert_eq!(tree["children"][1]["visible"].as_bool(), Some(false));
         assert!(tree["children"][2].get("visible").is_none());
@@ -242,7 +233,6 @@ mod tests {
 
         remove_default_visible(&mut tree).unwrap();
 
-        // String visible should not be touched
         assert_eq!(tree.get("visible").unwrap().as_str(), Some("true"));
     }
 }

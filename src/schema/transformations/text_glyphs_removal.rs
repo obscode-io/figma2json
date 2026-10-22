@@ -82,13 +82,11 @@ mod tests {
 
         remove_text_glyphs(&mut tree).unwrap();
 
-        // Check that non-derivedTextData fields are preserved
         assert_eq!(tree.get("name").unwrap().as_str(), Some("TextNode"));
         assert_eq!(tree.get("visible").unwrap().as_bool(), Some(true));
         assert_eq!(tree.get("x").unwrap().as_i64(), Some(10));
         assert_eq!(tree.get("y").unwrap().as_i64(), Some(20));
 
-        // Check that derivedTextData preserves all fields except glyphs
         let derived_text_data = tree.get("derivedTextData").unwrap();
         assert!(derived_text_data.get("glyphs").is_none());
         assert_eq!(
@@ -139,12 +137,10 @@ mod tests {
 
         remove_text_glyphs(&mut tree).unwrap();
 
-        // Check first nested derivedTextData
         let child1_data = &tree["children"][0]["derivedTextData"];
         assert!(child1_data.get("glyphs").is_none());
         assert_eq!(child1_data.get("data").unwrap().as_str(), Some("keep"));
 
-        // Check deeply nested derivedTextData
         let deep_child_data = &tree["children"][1]["children"][0]["derivedTextData"];
         assert!(deep_child_data.get("glyphs").is_none());
         assert_eq!(
@@ -165,7 +161,6 @@ mod tests {
 
         remove_text_glyphs(&mut tree).unwrap();
 
-        // derivedTextData without glyphs should be unchanged
         let derived_text_data = tree.get("derivedTextData").unwrap();
         assert!(derived_text_data.get("glyphs").is_none());
         assert!(derived_text_data.get("layoutInfo").is_some());
@@ -186,7 +181,6 @@ mod tests {
 
         remove_text_glyphs(&mut tree).unwrap();
 
-        // Tree without derivedTextData should be unchanged
         assert_eq!(tree.get("name").unwrap().as_str(), Some("Rectangle"));
         assert_eq!(tree.get("width").unwrap().as_i64(), Some(100));
         assert_eq!(tree.get("height").unwrap().as_i64(), Some(200));
@@ -217,7 +211,6 @@ mod tests {
 
         remove_text_glyphs(&mut tree).unwrap();
 
-        // All derivedTextData objects should have glyphs removed
         let text1_data = &tree["children"][0]["derivedTextData"];
         assert!(text1_data.get("glyphs").is_none());
         assert_eq!(text1_data.get("prop1").unwrap().as_str(), Some("value1"));
@@ -262,7 +255,6 @@ mod tests {
 
         remove_text_glyphs(&mut tree).unwrap();
 
-        // Only glyphs inside derivedTextData should be removed
         assert!(tree.get("metadata").unwrap().get("glyphs").is_some());
 
         let derived_text_data = tree.get("derivedTextData").unwrap();

@@ -2,8 +2,6 @@
 name = "figma2json"
 version = "0.0.1"
 edition = "2021"
-# Set by the locked dependency tree (`time`, pulled in by `zip`, needs 1.88);
-# CI builds and tests this version with `--locked`.
 rust-version = "1.88"
 authors = ["mtalhazulf <talhazulf4163@gmail.com>"]
 description = "CLI tool to convert Figma .fig files to LLM-friendly JSON format"
@@ -14,28 +12,21 @@ keywords = ["figma", "converter", "json", "cli", "llm"]
 categories = ["command-line-utilities", "encoding"]
 
 [dependencies]
-# Error handling
 anyhow = "1.0"
 thiserror = "1.0"
 
-# ZIP archive handling
 zip = "0.6"
 
-# Compression
 flate2 = "1.0"
 zstd = "0.13"
 
-# Kiwi schema decoding
 kiwi-schema = "0.2.1"
 
-# JSON serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
-# Base64 encoding for blobs
 base64 = "0.21"
 
-# CLI argument parsing
 clap = { version = "4.5", features = ["derive"] }
 
 [lints.rust]

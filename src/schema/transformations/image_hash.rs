@@ -76,6 +76,8 @@ fn transform_recursive(value: &mut JsonValue, base_dir: &Path) {
 /// file on disk to carry the detected extension.
 ///
 /// Objects whose `hash` is missing or not a valid byte array are left as-is.
+/// A failed rename is ignored: the file may already have been renamed (or not
+/// exist yet); the JSON still gets the extension.
 fn transform_image(image: &mut Map<String, JsonValue>, base_dir: &Path) {
     let Some(mut filename) = image
         .get("hash")
@@ -88,8 +90,6 @@ fn transform_image(image: &mut Map<String, JsonValue>, base_dir: &Path) {
     let file_path = base_dir.join(&filename);
     if let Some(extension) = detect_image_format(&file_path) {
         filename.push_str(extension);
-        // A failed rename is fine: the file may already have been renamed
-        // (or not exist yet); the JSON still gets the extension.
         let _ = fs::rename(&file_path, base_dir.join(&filename));
     }
 
@@ -110,7 +110,6 @@ fn hash_to_filename(hash: &[JsonValue]) -> Option<String> {
     filename.push_str("images/");
     for value in hash {
         let byte = u8::try_from(value.as_u64()?).ok()?;
-        // Writing to a String cannot fail.
         let _ = write!(filename, "{byte:02x}");
     }
     Some(filename)
@@ -144,11 +143,9 @@ fn detect_image_format(file_path: &Path) -> Option<&'static str> {
     if header.starts_with(GIF) {
         return Some(".gif");
     }
-    // WebP: "RIFF" <4-byte size> "WEBP"
     if header.len() >= 12 && header.starts_with(b"RIFF") && &header[8..12] == b"WEBP" {
         return Some(".webp");
     }
-    // SVG: text-based, look for XML/SVG markers
     if let Ok(text) = std::str::from_utf8(header) {
         let text = text.to_lowercase();
         if text.contains("<svg") || (text.contains("<?xml") && text.contains("svg")) {
@@ -207,7 +204,7 @@ mod tests {
 
     #[test]
     fn test_hash_to_filename_invalid() {
-        let hash = vec![JsonValue::from(256)]; // Out of u8 range
+        let hash = vec![JsonValue::from(256)];
         assert!(hash_to_filename(&hash).is_none());
     }
 
@@ -221,7 +218,6 @@ mod tests {
             }
         });
 
-        // Use a test path (file won't exist, so no extension will be added)
         transform_image_hashes(&mut tree, std::path::Path::new(".")).unwrap();
 
         let image = tree.get("image").unwrap();
@@ -282,7 +278,6 @@ mod tests {
 
         transform_image_hashes(&mut tree, std::path::Path::new(".")).unwrap();
 
-        // Check first nested image
         let child1_image = &tree["children"][0]["image"];
         assert!(child1_image.get("hash").is_none());
         assert_eq!(
@@ -290,7 +285,6 @@ mod tests {
             Some("images/6049")
         );
 
-        // Check deeply nested image
         let child2_image = &tree["children"][1]["fills"][0]["image"];
         assert!(child2_image.get("hash").is_none());
         assert_eq!(
@@ -316,13 +310,11 @@ mod tests {
 
         transform_image_hashes(&mut tree, std::path::Path::new(".")).unwrap();
 
-        // Check that non-image fields are preserved
         assert_eq!(tree.get("name").unwrap().as_str(), Some("Rectangle"));
         assert_eq!(tree.get("visible").unwrap().as_bool(), Some(true));
         assert_eq!(tree.get("x").unwrap().as_i64(), Some(10));
         assert_eq!(tree.get("y").unwrap().as_i64(), Some(20));
 
-        // Check that image object preserves all fields except hash
         let image = tree.get("image").unwrap();
         assert!(image.get("hash").is_none());
         assert_eq!(
@@ -346,7 +338,6 @@ mod tests {
 
         transform_image_hashes(&mut tree, std::path::Path::new(".")).unwrap();
 
-        // Image without hash should be unchanged
         let image = tree.get("image").unwrap();
         assert!(image.get("hash").is_none());
         assert!(image.get("filename").is_none());
@@ -403,37 +394,30 @@ mod tests {
 
         transform_image_hashes(&mut tree, std::path::Path::new(".")).unwrap();
 
-        // metadata.hash should remain unchanged (not in "image" or "imageThumbnail" field)
         let metadata = tree.get("metadata").unwrap();
         assert!(metadata.get("hash").is_some());
         assert!(metadata.get("filename").is_none());
 
-        // image.hash should be transformed
         let image = tree.get("image").unwrap();
         assert!(image.get("hash").is_none());
         assert_eq!(image.get("filename").unwrap().as_str(), Some("images/6049"));
     }
 
-    // Tests for image format detection with actual files
-
     #[test]
     fn test_detect_png_format() {
         use std::io::Write;
 
-        // Create a temporary directory
         let temp_dir = std::env::temp_dir().join("figma2json_test_png");
         let _ = fs::create_dir_all(&temp_dir);
 
-        // Create a test file with PNG magic bytes
         let test_file = temp_dir.join("images").join("6049a17a");
         fs::create_dir_all(test_file.parent().unwrap()).unwrap();
         let mut file = fs::File::create(&test_file).unwrap();
         file.write_all(&[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
             .unwrap();
-        file.write_all(&[0; 100]).unwrap(); // Add some padding
+        file.write_all(&[0; 100]).unwrap();
         drop(file);
 
-        // Test transformation
         let mut tree = json!({
             "image": {
                 "hash": [96, 73, 161, 122],
@@ -449,11 +433,9 @@ mod tests {
             Some("images/6049a17a.png")
         );
 
-        // Verify file was renamed
         assert!(temp_dir.join("images/6049a17a.png").exists());
         assert!(!test_file.exists());
 
-        // Cleanup
         let _ = fs::remove_dir_all(&temp_dir);
     }
 
@@ -467,7 +449,7 @@ mod tests {
         let test_file = temp_dir.join("images").join("a17a6049");
         fs::create_dir_all(test_file.parent().unwrap()).unwrap();
         let mut file = fs::File::create(&test_file).unwrap();
-        file.write_all(&[0xFF, 0xD8, 0xFF, 0xE0]).unwrap(); // JPEG magic bytes
+        file.write_all(&[0xFF, 0xD8, 0xFF, 0xE0]).unwrap();
         file.write_all(&[0; 100]).unwrap();
         drop(file);
 
@@ -501,7 +483,7 @@ mod tests {
         let test_file = temp_dir.join("images").join("12345678");
         fs::create_dir_all(test_file.parent().unwrap()).unwrap();
         let mut file = fs::File::create(&test_file).unwrap();
-        file.write_all(b"GIF89a").unwrap(); // GIF magic bytes
+        file.write_all(b"GIF89a").unwrap();
         file.write_all(&[0; 100]).unwrap();
         drop(file);
 
@@ -536,7 +518,7 @@ mod tests {
         fs::create_dir_all(test_file.parent().unwrap()).unwrap();
         let mut file = fs::File::create(&test_file).unwrap();
         file.write_all(b"RIFF").unwrap();
-        file.write_all(&[0, 0, 0, 0]).unwrap(); // Size placeholder
+        file.write_all(&[0, 0, 0, 0]).unwrap();
         file.write_all(b"WEBP").unwrap();
         file.write_all(&[0; 100]).unwrap();
         drop(file);
@@ -606,7 +588,7 @@ mod tests {
         let test_file = temp_dir.join("images").join("deadbeef");
         fs::create_dir_all(test_file.parent().unwrap()).unwrap();
         let mut file = fs::File::create(&test_file).unwrap();
-        file.write_all(b"UNKNOWN FORMAT").unwrap(); // Unknown magic bytes
+        file.write_all(b"UNKNOWN FORMAT").unwrap();
         file.write_all(&[0; 100]).unwrap();
         drop(file);
 
@@ -620,13 +602,11 @@ mod tests {
         transform_image_hashes(&mut tree, &temp_dir).unwrap();
 
         let image = tree.get("image").unwrap();
-        // Unknown format should keep filename without extension
         assert_eq!(
             image.get("filename").unwrap().as_str(),
             Some("images/deadbeef")
         );
 
-        // Original file should still exist (not renamed)
         assert!(test_file.exists());
 
         let _ = fs::remove_dir_all(&temp_dir);
@@ -639,7 +619,6 @@ mod tests {
         let temp_dir = std::env::temp_dir().join("figma2json_test_multi");
         let _ = fs::create_dir_all(&temp_dir);
 
-        // Create PNG file
         let png_file = temp_dir.join("images").join("6049");
         fs::create_dir_all(png_file.parent().unwrap()).unwrap();
         let mut file = fs::File::create(&png_file).unwrap();
@@ -647,7 +626,6 @@ mod tests {
             .unwrap();
         drop(file);
 
-        // Create JPEG file
         let jpg_file = temp_dir.join("images").join("a17a");
         let mut file = fs::File::create(&jpg_file).unwrap();
         file.write_all(&[0xFF, 0xD8, 0xFF, 0xE0]).unwrap();

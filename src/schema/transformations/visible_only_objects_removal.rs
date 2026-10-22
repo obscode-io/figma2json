@@ -180,7 +180,6 @@ mod tests {
         assert_eq!(items.len(), 2);
         assert_eq!(items[0]["name"].as_str(), Some("A"));
         assert_eq!(items[1]["name"].as_str(), Some("B"));
-        // Second item should still have visible since it has other fields too
         assert!(items[1].get("visible").is_some());
     }
 
@@ -198,13 +197,11 @@ mod tests {
         let original = tree.clone();
         remove_visible_only_objects(&mut tree).unwrap();
 
-        // Tree should be unchanged since all visible fields have other fields too
         assert_eq!(tree, original);
     }
 
     #[test]
     fn test_real_world_roles_members_case() {
-        // From archives/roles-members.json line 203
         let mut tree = json!({
             "symbolData": {
                 "symbolOverrides": [
@@ -241,7 +238,6 @@ mod tests {
 
         let overrides = tree["symbolData"]["symbolOverrides"].as_array().unwrap();
         assert_eq!(overrides.len(), 4);
-        // Verify the visible-only object was removed
         assert!(overrides
             .iter()
             .all(|o| o.get("textData").is_some() || o.get("overrideLevel").is_some()));
@@ -283,7 +279,6 @@ mod tests {
 
         remove_visible_only_objects(&mut tree).unwrap();
 
-        // Empty objects should be preserved, only visible-only objects are removed
         assert!(tree.get("empty").is_some());
         assert!(tree.get("visibleOnly").is_none());
     }
@@ -303,7 +298,6 @@ mod tests {
         remove_visible_only_objects(&mut tree).unwrap();
 
         let items = tree.get("items").unwrap().as_array().unwrap();
-        // All should be removed regardless of the visible value
         assert_eq!(items.len(), 0);
     }
 }

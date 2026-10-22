@@ -16,6 +16,9 @@ use serde_json::Value as JsonValue;
 /// - "rotation" - Image rotation (when inside paint objects)
 /// - "scale" - Image scale (when inside paint objects)
 ///
+/// `rotation` and `scale` are only removed from image paint objects: objects
+/// whose `type` is the (unsimplified) enum `{"value": "IMAGE"}`.
+///
 /// These fields contain image metadata that is not essential for basic
 /// HTML/CSS rendering.
 ///
@@ -50,8 +53,6 @@ pub fn remove_image_metadata_fields(tree: &mut JsonValue) -> Result<()> {
             map.remove(*field);
         }
 
-        // rotation and scale are only image metadata inside image paint objects,
-        // i.e. objects whose `type` is the (unsimplified) enum `{"value": "IMAGE"}`.
         let is_image_paint = map
             .get("type")
             .and_then(JsonValue::as_object)
@@ -212,7 +213,6 @@ mod tests {
 
         remove_image_metadata_fields(&mut tree).unwrap();
 
-        // rotation and scale should be preserved for non-image objects
         assert_eq!(tree.get("rotation").unwrap().as_f64(), Some(45.0));
         assert_eq!(tree.get("scale").unwrap().as_f64(), Some(2.0));
         assert_eq!(tree.get("name").unwrap().as_str(), Some("Frame"));
@@ -243,7 +243,6 @@ mod tests {
 
         remove_image_metadata_fields(&mut tree).unwrap();
 
-        // All metadata fields removed
         assert!(tree.get("thumbHash").is_none());
         assert!(tree.get("animationFrame").is_none());
         assert!(tree.get("imageShouldColorManage").is_none());
@@ -254,7 +253,6 @@ mod tests {
         assert!(tree.get("rotation").is_none());
         assert!(tree.get("scale").is_none());
 
-        // Other fields preserved
         assert_eq!(tree.get("name").unwrap().as_str(), Some("ComplexImage"));
         assert!(tree.get("type").is_some());
         assert_eq!(tree.get("opacity").unwrap().as_f64(), Some(1.0));
@@ -281,7 +279,6 @@ mod tests {
 
         remove_image_metadata_fields(&mut tree).unwrap();
 
-        // Check nested image paint
         let paint = &tree["fillPaints"][0];
         assert!(paint.get("thumbHash").is_none());
         assert!(paint.get("animationFrame").is_none());
@@ -302,7 +299,6 @@ mod tests {
 
         remove_image_metadata_fields(&mut tree).unwrap();
 
-        // Tree without image metadata should be unchanged
         assert_eq!(tree.get("name").unwrap().as_str(), Some("Rectangle"));
         assert_eq!(tree.get("width").unwrap().as_i64(), Some(100));
         assert_eq!(tree.get("height").unwrap().as_i64(), Some(200));
@@ -330,9 +326,7 @@ mod tests {
         remove_image_metadata_fields(&mut tree).unwrap();
 
         let paint = &tree["fillPaints"][0];
-        // imageThumbnail should be removed (duplicate of image)
         assert!(paint.get("imageThumbnail").is_none());
-        // image should be preserved
         assert!(paint.get("image").is_some());
     }
 

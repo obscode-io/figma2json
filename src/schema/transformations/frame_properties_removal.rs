@@ -138,14 +138,12 @@ mod tests {
 
         remove_frame_properties(&mut tree).unwrap();
 
-        // Check first nested element
         assert!(tree["children"][0].get("frameMaskDisabled").is_none());
         assert_eq!(
             tree["children"][0].get("name").unwrap().as_str(),
             Some("Child1")
         );
 
-        // Check deeply nested element
         let deep_child = &tree["children"][1]["children"][0];
         assert!(deep_child.get("targetAspectRatio").is_none());
         assert_eq!(deep_child.get("name").unwrap().as_str(), Some("DeepChild"));
@@ -162,7 +160,6 @@ mod tests {
 
         remove_frame_properties(&mut tree).unwrap();
 
-        // Tree without frame properties should be unchanged
         assert_eq!(tree.get("name").unwrap().as_str(), Some("Rectangle"));
         assert_eq!(tree.get("width").unwrap().as_i64(), Some(100));
         assert_eq!(tree.get("height").unwrap().as_i64(), Some(200));
@@ -190,10 +187,8 @@ mod tests {
 
         remove_frame_properties(&mut tree).unwrap();
 
-        // Frame properties removed
         assert!(tree.get("frameMaskDisabled").is_none());
 
-        // Other fields preserved
         assert_eq!(tree.get("name").unwrap().as_str(), Some("Ecran 1"));
         assert_eq!(tree.get("type").unwrap().as_str(), Some("FRAME"));
         assert!(tree.get("size").is_some());
@@ -226,7 +221,6 @@ mod tests {
 
         remove_frame_properties(&mut tree).unwrap();
 
-        // All frame properties in array should be removed
         assert!(tree["items"][0].get("frameMaskDisabled").is_none());
         assert_eq!(
             tree["items"][0].get("name").unwrap().as_str(),
@@ -261,7 +255,6 @@ mod tests {
 
         remove_frame_properties(&mut tree).unwrap();
 
-        // Both true and false values should be removed
         assert!(tree["frame1"].get("frameMaskDisabled").is_none());
         assert_eq!(tree["frame1"].get("name").unwrap().as_str(), Some("Frame1"));
 
@@ -275,7 +268,6 @@ mod tests {
 
         remove_frame_properties(&mut tree).unwrap();
 
-        // Empty object should remain empty
         assert_eq!(tree.as_object().unwrap().len(), 0);
     }
 }

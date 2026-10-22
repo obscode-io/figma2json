@@ -8,7 +8,6 @@ use crate::error::Result;
 use base64::{engine::general_purpose, Engine as _};
 use serde_json::Value as JsonValue;
 
-// Re-export commonly used items
 pub use parser::{parse_blob, parse_commands, parse_vector_network};
 pub use substitution::substitute_blobs;
 
@@ -61,7 +60,7 @@ mod tests {
     fn test_process_blobs_with_bytes() {
         let blobs = vec![json!({
             "id": 1,
-            "bytes": [72, 101, 108, 108, 111]  // "Hello" in ASCII
+            "bytes": [72, 101, 108, 108, 111]
         })];
 
         let processed = process_blobs(blobs).unwrap();
@@ -70,10 +69,9 @@ mod tests {
         assert_eq!(blobs_array.len(), 1);
         let blob = &blobs_array[0];
 
-        // Check that bytes field is now a base64 string
         let bytes_value = blob.get("bytes").unwrap();
         assert!(bytes_value.is_string());
-        assert_eq!(bytes_value.as_str().unwrap(), "SGVsbG8="); // "Hello" in base64
+        assert_eq!(bytes_value.as_str().unwrap(), "SGVsbG8=");
     }
 
     #[test]
@@ -103,11 +101,11 @@ mod tests {
         let blobs = vec![
             json!({
                 "id": 1,
-                "bytes": [65, 66, 67]  // "ABC"
+                "bytes": [65, 66, 67]
             }),
             json!({
                 "id": 2,
-                "bytes": [88, 89, 90]  // "XYZ"
+                "bytes": [88, 89, 90]
             }),
         ];
 
@@ -118,11 +116,11 @@ mod tests {
         assert_eq!(
             blobs_array[0].get("bytes").unwrap().as_str().unwrap(),
             "QUJD"
-        ); // "ABC" in base64
+        );
         assert_eq!(
             blobs_array[1].get("bytes").unwrap().as_str().unwrap(),
             "WFla"
-        ); // "XYZ" in base64
+        );
     }
 
     #[test]

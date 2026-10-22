@@ -98,7 +98,6 @@ mod tests {
 
         remove_redundant_corner_radii(&mut tree).unwrap();
 
-        // Individual radii should be preserved
         assert!(tree.get("rectangleTopLeftCornerRadius").is_some());
         assert!(tree.get("rectangleTopRightCornerRadius").is_some());
         assert!(tree.get("rectangleBottomLeftCornerRadius").is_some());
@@ -165,12 +164,10 @@ mod tests {
         remove_redundant_corner_radii(&mut tree).unwrap();
 
         let children = tree.get("children").unwrap().as_array().unwrap();
-        // Child1 has cornerRadius, so individual radii should be removed
         assert!(children[0].get("rectangleTopLeftCornerRadius").is_none());
         assert!(children[0]
             .get("rectangleBottomRightCornerRadius")
             .is_none());
-        // Child2 has no cornerRadius, so individual radii should be preserved
         assert!(children[1].get("rectangleTopLeftCornerRadius").is_some());
         assert!(children[1]
             .get("rectangleBottomRightCornerRadius")

@@ -73,7 +73,6 @@ mod tests {
 
         remove_default_blend_mode(&mut tree).unwrap();
 
-        // Non-NORMAL blend modes should be preserved
         assert_eq!(tree.get("blendMode").unwrap().as_str(), Some("MULTIPLY"));
         assert_eq!(tree.get("name").unwrap().as_str(), Some("Shape"));
         assert_eq!(tree.get("opacity").unwrap().as_f64(), Some(0.8));
@@ -90,7 +89,6 @@ mod tests {
 
             remove_default_blend_mode(&mut tree).unwrap();
 
-            // All non-NORMAL blend modes should be preserved
             assert_eq!(tree.get("blendMode").unwrap().as_str(), Some(mode));
         }
     }
@@ -105,7 +103,6 @@ mod tests {
 
         remove_default_blend_mode(&mut tree).unwrap();
 
-        // Tree without blendMode should be unchanged
         assert_eq!(tree.get("name").unwrap().as_str(), Some("Rectangle"));
         assert_eq!(tree.get("width").unwrap().as_i64(), Some(100));
         assert!(tree.get("blendMode").is_none());
@@ -128,7 +125,6 @@ mod tests {
 
         remove_default_blend_mode(&mut tree).unwrap();
 
-        // NORMAL removed, MULTIPLY preserved
         assert!(tree["children"][0].get("blendMode").is_none());
         assert_eq!(tree["children"][0]["name"].as_str(), Some("Child1"));
 
@@ -155,11 +151,9 @@ mod tests {
 
         remove_default_blend_mode(&mut tree).unwrap();
 
-        // NORMAL removed from first paint
         assert!(tree["fillPaints"][0].get("blendMode").is_none());
         assert_eq!(tree["fillPaints"][0]["type"].as_str(), Some("SOLID"));
 
-        // MULTIPLY preserved in second paint
         assert_eq!(
             tree["fillPaints"][1]["blendMode"].as_str(),
             Some("MULTIPLY")
@@ -188,7 +182,6 @@ mod tests {
 
         remove_default_blend_mode(&mut tree).unwrap();
 
-        // All NORMAL blend modes should be removed at all levels
         let frame = &tree["document"]["children"][0];
         assert!(frame.get("blendMode").is_none());
         assert!(frame["fillPaints"][0].get("blendMode").is_none());
@@ -207,8 +200,6 @@ mod tests {
 
         remove_default_blend_mode(&mut tree).unwrap();
 
-        // Enum objects should not be touched (this runs after enum_simplification)
-        // So this should be preserved as-is
         assert!(tree.get("blendMode").is_some());
         let blend_mode = tree.get("blendMode").unwrap();
         assert!(blend_mode.is_object());
@@ -222,7 +213,6 @@ mod tests {
 
         remove_default_blend_mode(&mut tree).unwrap();
 
-        // Lowercase "normal" should not be removed (only "NORMAL")
         assert_eq!(tree.get("blendMode").unwrap().as_str(), Some("normal"));
     }
 
@@ -238,7 +228,6 @@ mod tests {
 
         remove_default_blend_mode(&mut tree).unwrap();
 
-        // All NORMAL blend modes should be removed
         assert!(tree["children"][0].get("blendMode").is_none());
         assert!(tree["children"][1].get("blendMode").is_none());
         assert!(tree["children"][2].get("blendMode").is_none());

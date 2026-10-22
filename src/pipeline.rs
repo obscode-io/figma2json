@@ -106,10 +106,6 @@ pub fn convert_raw(bytes: &[u8]) -> Result<Value> {
     Ok(assemble(version, file_type, document, blobs))
 }
 
-// ---------------------------------------------------------------------------
-// Decode phase
-// ---------------------------------------------------------------------------
-
 /// A decoded `.fig` file: the node tree plus the still-unprocessed blobs.
 struct Decoded {
     version: u32,
@@ -121,6 +117,9 @@ struct Decoded {
 }
 
 /// Decode a `.fig` file (bare or in a ZIP container) into its node tree and blobs.
+///
+/// The node changes and blobs are moved (not cloned) out of the decoded
+/// message: they are by far the largest values in memory.
 fn decode(bytes: &[u8]) -> Result<Decoded> {
     let unzipped;
     let bytes = if parser::is_zip_container(bytes) {
@@ -147,8 +146,6 @@ fn decode(bytes: &[u8]) -> Result<Decoded> {
         schema::decode_fig_to_json(&schema_bytes, &data_bytes)?
     };
 
-    // Move (rather than clone) the node changes and blobs out of the decoded
-    // message: they are by far the largest values in memory.
     let node_changes = take_array(&mut message, "nodeChanges")?;
     let document = schema::build_tree(node_changes)?;
     let blobs = take_array(&mut message, "blobs")?;
@@ -196,10 +193,6 @@ fn assemble(version: u32, file_type: FileType, document: Value, blobs: Vec<Value
         "blobs": blobs,
     })
 }
-
-// ---------------------------------------------------------------------------
-// Transform phase
-// ---------------------------------------------------------------------------
 
 /// A transformation pass over a JSON value.
 type Pass = fn(&mut Value) -> Result<()>;
@@ -249,7 +242,6 @@ const NORMALIZE: &[(Pass, When)] = &[
     (schema::transform_matrix_to_css, When::Always),
     (schema::transform_colors_to_css, When::Always),
     (schema::simplify_enums, When::Always),
-    // Needs simplified enums.
     (schema::remove_default_blend_mode, When::Always),
 ];
 
@@ -259,7 +251,6 @@ const CLEAN_DOCUMENT: &[(Pass, When)] = &[
     (schema::remove_guid_fields, When::Always),
     (schema::remove_edit_info_fields, When::Always),
     (schema::remove_phase_fields, When::Always),
-    // Second geometry run: catches geometry inside substituted blobs.
     (schema::remove_geometry_fields, When::LegacyOnly),
     (schema::remove_geometry_only, When::DefaultOnly),
     (schema::remove_text_layout_fields, When::Always),
@@ -284,6 +275,11 @@ const CLEAN_DOCUMENT: &[(Pass, When)] = &[
 
 /// Stage 4, on the assembled output root (`document`, `blobs`, `version`,
 /// `fileType` and, in the default mode, `variables` and `styles`).
+///
+/// Redundant padding removal is legacy only: Figma omits padding that is 0, so
+/// once right/bottom are also removed when equal to left/top, a missing value
+/// could mean either. The default output keeps every padding value Figma
+/// stores (missing = 0).
 const CLEAN_OUTPUT: &[(Pass, When)] = &[
     (schema::remove_document_properties, When::Always),
     (schema::remove_root_metadata, When::Always),
@@ -306,9 +302,6 @@ const CLEAN_OUTPUT: &[(Pass, When)] = &[
     (schema::remove_corner_smoothing, When::Always),
     (schema::remove_invisible_paints, When::Always),
     (schema::remove_empty_paint_arrays, When::Always),
-    // Legacy only: Figma omits padding that is 0, so once right/bottom are also
-    // removed when equal to left/top, a missing value could mean either. The
-    // default output keeps every padding value Figma stores (missing = 0).
     (schema::remove_redundant_padding, When::LegacyOnly),
     (schema::remove_stack_child_properties, When::LegacyOnly),
     (schema::remove_stack_sizing_properties, When::LegacyOnly),
@@ -339,13 +332,9 @@ fn transform(decoded: Decoded, base_dir: Option<&Path>, options: &ConvertOptions
     run(PRUNE, &mut document, options)?;
     let blobs = substitute_blobs(&mut document, blobs)?;
 
-    // Image hash arrays become `images/<hex>.<ext>` filenames; the image files
-    // in `base_dir` are renamed to carry the detected extension.
     schema::transform_image_hashes(&mut document, base_dir.unwrap_or(Path::new(".")))?;
     run(NORMALIZE, &mut document, options)?;
 
-    // Capture ids, types, component links and variable/style names before
-    // guid removal and internal-node removal delete what this needs.
     let definitions = if options.legacy {
         None
     } else {
@@ -452,7 +441,6 @@ mod tests {
     fn default_mode_keeps_design_context() {
         let output = convert_sample(&ConvertOptions::default());
 
-        // Root metadata and blobs are removed; variables/styles are added.
         let root = output.as_object().unwrap();
         assert!(!root.contains_key("version"));
         assert!(!root.contains_key("fileType"));
@@ -468,7 +456,6 @@ mod tests {
             assert!(frame.get(removed).is_none(), "{removed} should be removed");
         }
 
-        // The internal-only page is removed.
         assert_eq!(output["document"]["children"].as_array().unwrap().len(), 1);
     }
 
@@ -516,7 +503,6 @@ mod tests {
     fn missing_arrays_are_invalid_documents() {
         let mut message = json!({"nodeChanges": [1, 2]});
         assert_eq!(take_array(&mut message, "nodeChanges").unwrap().len(), 2);
-        // Taken, not cloned.
         assert_eq!(message["nodeChanges"], json!([]));
         assert!(matches!(
             take_array(&mut message, "blobs"),

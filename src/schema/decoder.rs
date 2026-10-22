@@ -10,6 +10,12 @@ use serde_json::Value as JsonValue;
 ///
 /// Takes decompressed schema and data chunks and decodes them using the Kiwi schema format.
 ///
+/// The message is decoded straight into JSON by walking the Kiwi schema, rather
+/// than building kiwi's own `Value` tree first and converting it: large files
+/// carry tens of megabytes of blob bytes, which as `Value::Byte` items (and then
+/// one JSON number per byte) used several GB of memory. Byte arrays in a `bytes`
+/// field are emitted as base64 strings.
+///
 /// # Arguments
 /// * `schema_bytes` - Decompressed schema chunk (chunk 0)
 /// * `data_bytes` - Decompressed data chunk (chunk 1)
@@ -27,12 +33,9 @@ use serde_json::Value as JsonValue;
 /// let json = decode_fig_to_json(&schema_bytes, &data_bytes).unwrap();
 /// ```
 pub fn decode_fig_to_json(schema_bytes: &[u8], data_bytes: &[u8]) -> Result<JsonValue> {
-    // 1. Decode the binary schema
     let schema = Schema::decode(schema_bytes)
         .map_err(|_| FigError::Decode("Failed to decode Kiwi binary schema".to_string()))?;
 
-    // 2. Find the root message type
-    // In Figma .fig files, the root message is named "Message" and contains nodeChanges and blobs
     let root_type_id = schema
         .defs
         .iter()
@@ -46,13 +49,6 @@ pub fn decode_fig_to_json(schema_bytes: &[u8], data_bytes: &[u8]) -> Result<Json
             FigError::Decode("No root Message definition found in schema".to_string())
         })?;
 
-    // 3. Decode the message data straight into JSON.
-    //
-    // This walks the Kiwi schema directly instead of building kiwi's own `Value`
-    // tree first and converting it. Large files carry tens of megabytes of blob
-    // bytes; as `Value::Byte` items (and then as one JSON number per byte) they
-    // used several GB of memory. Byte arrays in a `bytes` field are emitted as a
-    // base64 string here, which is what `blobs::process_blobs` produced anyway.
     let mut bb = ByteBuffer::new(data_bytes);
     decode_type(&schema, root_type_id, &mut bb)
         .map_err(|_| FigError::Decode("Failed to decode message data".to_string()))
@@ -146,7 +142,6 @@ fn decode_field(
                 .collect(),
         ));
     }
-    // Cap the pre-allocation: `len` comes from the file and may be corrupt.
     let mut array = Vec::with_capacity(len.min(1 << 16));
     for _ in 0..len {
         array.push(decode_type(schema, field.type_id, bb)?);
@@ -163,7 +158,6 @@ fn kiwi_value_to_json(value: &Value) -> JsonValue {
         Value::Int(n) => JsonValue::Number((*n).into()),
         Value::UInt(n) => JsonValue::Number((*n).into()),
         Value::Float(f) => {
-            // Handle special float values
             if f.is_nan() || f.is_infinite() {
                 JsonValue::Null
             } else {
@@ -178,7 +172,6 @@ fn kiwi_value_to_json(value: &Value) -> JsonValue {
         Value::UInt64(n) => JsonValue::Number((*n).into()),
         Value::Array(arr) => JsonValue::Array(arr.iter().map(kiwi_value_to_json).collect()),
         Value::Enum(enum_name, variant_name) => {
-            // Represent enum as object with type field
             let mut map = serde_json::Map::new();
             map.insert(
                 "__enum__".to_string(),
@@ -191,7 +184,6 @@ fn kiwi_value_to_json(value: &Value) -> JsonValue {
             JsonValue::Object(map)
         }
         Value::Object(_type_name, fields) => {
-            // Convert to JSON object
             let mut map = serde_json::Map::new();
 
             for (field_name, field_value) in fields {

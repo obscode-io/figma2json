@@ -86,14 +86,12 @@ mod tests {
 
         remove_document_properties(&mut tree).unwrap();
 
-        // Root document color profile should be removed
         assert!(tree["document"].get("documentColorProfile").is_none());
         assert_eq!(
             tree["document"].get("name").unwrap().as_str(),
             Some("Document")
         );
 
-        // Nested color profile should be removed
         assert!(tree["document"]["children"][0]
             .get("documentColorProfile")
             .is_none());
@@ -117,7 +115,6 @@ mod tests {
 
         remove_document_properties(&mut tree).unwrap();
 
-        // Tree without document properties should be unchanged
         assert_eq!(
             tree["document"].get("name").unwrap().as_str(),
             Some("Document")
@@ -143,10 +140,8 @@ mod tests {
 
         remove_document_properties(&mut tree).unwrap();
 
-        // Only documentColorProfile should be removed
         assert!(tree["document"].get("documentColorProfile").is_none());
 
-        // All other fields preserved
         assert_eq!(
             tree["document"].get("name").unwrap().as_str(),
             Some("Document")
@@ -187,7 +182,6 @@ mod tests {
 
         remove_document_properties(&mut tree).unwrap();
 
-        // All variations of documentColorProfile should be removed
         assert!(tree["doc1"].get("documentColorProfile").is_none());
         assert!(tree["doc2"].get("documentColorProfile").is_none());
         assert!(tree["doc3"].get("documentColorProfile").is_none());
@@ -215,7 +209,6 @@ mod tests {
 
         remove_document_properties(&mut tree).unwrap();
 
-        // Deeply nested color profile should be removed
         assert!(tree["root"]["children"][0]["children"][0]
             .get("documentColorProfile")
             .is_none());
@@ -251,7 +244,6 @@ mod tests {
 
         remove_document_properties(&mut tree).unwrap();
 
-        // All color profiles in array should be removed
         assert!(tree["documents"][0].get("documentColorProfile").is_none());
         assert_eq!(
             tree["documents"][0].get("name").unwrap().as_str(),
@@ -271,7 +263,6 @@ mod tests {
 
         remove_document_properties(&mut tree).unwrap();
 
-        // Empty object should remain empty
         assert_eq!(tree.as_object().unwrap().len(), 0);
     }
 
@@ -281,7 +272,6 @@ mod tests {
 
         remove_document_properties(&mut tree).unwrap();
 
-        // Primitive values should be unchanged
         assert_eq!(tree.as_str(), Some("document"));
     }
 }

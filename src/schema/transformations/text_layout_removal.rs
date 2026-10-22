@@ -216,11 +216,9 @@ mod tests {
 
         remove_text_layout_fields(&mut tree).unwrap();
 
-        // Check that non-layout fields are preserved
         assert_eq!(tree.get("name").unwrap().as_str(), Some("TextNode"));
         assert_eq!(tree.get("visible").unwrap().as_bool(), Some(true));
 
-        // Check that derivedTextData preserves non-layout fields
         let derived_text_data = tree.get("derivedTextData").unwrap();
         assert!(derived_text_data.get("baselines").is_none());
         assert!(derived_text_data.get("layoutSize").is_some());
@@ -259,12 +257,10 @@ mod tests {
 
         remove_text_layout_fields(&mut tree).unwrap();
 
-        // Check first nested derivedTextData
         let child1_data = &tree["children"][0]["derivedTextData"];
         assert!(child1_data.get("baselines").is_none());
         assert!(child1_data.get("layoutSize").is_some());
 
-        // Check deeply nested derivedTextData
         let deep_child_data = &tree["children"][1]["children"][0]["derivedTextData"];
         assert!(deep_child_data.get("fontMetaData").is_none());
         assert!(deep_child_data.get("layoutSize").is_some());
@@ -280,7 +276,6 @@ mod tests {
 
         remove_text_layout_fields(&mut tree).unwrap();
 
-        // Tree without derivedTextData should be unchanged
         assert_eq!(tree.get("name").unwrap().as_str(), Some("Rectangle"));
         assert_eq!(tree.get("width").unwrap().as_i64(), Some(100));
         assert_eq!(tree.get("height").unwrap().as_i64(), Some(200));
@@ -296,7 +291,6 @@ mod tests {
 
         remove_text_layout_fields(&mut tree).unwrap();
 
-        // Empty derivedTextData should remain empty
         let derived_text_data = tree.get("derivedTextData").unwrap();
         assert_eq!(derived_text_data.as_object().unwrap().len(), 0);
     }

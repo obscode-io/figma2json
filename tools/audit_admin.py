@@ -40,7 +40,6 @@ for top in scope:
     for n, path in B.walk(top):
         t = n.get("type")
         R["node types"][t] += 1
-        # --- unbound colors (no token)
         for key in ("fillPaints", "strokePaints"):
             for p in n.get(key) or []:
                 if p.get("visible", True) is False:
@@ -60,7 +59,6 @@ for top in scope:
             R["effects"][e.get("type")] += 1
             if not n.get("effectStyle") and "colorVar" not in json.dumps(e):
                 R["unbound effects"][f"{e.get('type')} {e.get('color')} {(e.get('offset') or {}).get('x', 0)},{(e.get('offset') or {}).get('y', 0)} r{e.get('radius')} s{e.get('spread', 0)}"] += 1
-        # --- text
         if t == "TEXT":
             fn = (n.get("fontName") or {})
             R["fonts"][f"{fn.get('family')} {fn.get('style')}"] += 1
@@ -73,7 +71,6 @@ for top in scope:
                 R["text auto resize"][n["textAutoResize"]] += 1
             if n.get("textTruncation") == "ENDING":
                 R["text"]["truncated (ellipsis)"] += 1
-        # --- layout
         if n.get("stackMode") == "GRID":
             R["layout"]["CSS grid frames"] += 1
             ex("grid frames", f"{where(n)} → '{n.get('name')}' ({n.get('id')})")
@@ -106,7 +103,6 @@ for top in scope:
             R["shapes"][t] += 1
         if t == "VECTOR" and not any((n.get("componentId") or "") for _ in [0]):
             pass
-        # --- instances
         if t == "INSTANCE":
             R["instances"]["total"] += 1
             if n.get("componentId") not in used_comp:
@@ -120,19 +116,15 @@ for top in scope:
                     for k in o:
                         if k not in ("guidPath", "targetId"):
                             R["override properties"][k] += 1
-        # --- detached-looking frames (named like a component but not an instance)
         if t == "FRAME" and n.get("name") in {nodes[c].get("name") for c in []}:
             pass
-        # --- prototype
         for i in n.get("prototypeInteractions") or []:
             R["interactions"][(i.get("event") or {}).get("interactionType")] += 1
-        # --- variable modes
         vm = (n.get("variableModeBySetMap") or {}).get("entries")
         if vm:
             R["misc"]["frames with explicit variable mode (e.g. Dark)"] += 1
             ex("modes", f"{where(n)} → '{n.get('name')}' {json.dumps(vm)[:120]}")
 
-# components used: are they from the Design System file?
 ds = json.load(open(f"{cache}/design-system/components.json"))
 ds_names = {s["name"].lower() for s in ds["componentSets"]} | {c["name"].lower() for c in ds["components"]}
 for c in comp_idx["components"]:
@@ -141,14 +133,12 @@ for c in comp_idx["components"]:
     if name not in ds_names:
         ex("components not in DS", f"{c['componentSetName'] or '–'} / {c['componentName']} ({c['id']}, {c['source']})", 60)
 
-# icons: every icon-looking component exported as svg?
 icon_ids = {e["id"] for e in icons}
 for c in comp_idx["components"]:
     nm = c["componentName"]
     if re.match(r"^(stroke|fill)/", nm) and c["id"] not in icon_ids:
         ex("icon without svg", f"{nm} ({c['id']})")
 
-# states per flow from screen names
 states = collections.defaultdict(list)
 for s in idx["screens"]:
     states[s["flow"]].append(s["name"])

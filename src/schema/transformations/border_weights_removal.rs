@@ -108,7 +108,6 @@ mod tests {
 
         remove_border_weights(&mut tree).unwrap();
 
-        // Tree without border weights should be unchanged
         assert_eq!(tree.get("name").unwrap().as_str(), Some("Circle"));
         assert_eq!(tree.get("radius").unwrap().as_i64(), Some(50));
         assert_eq!(tree.get("visible").unwrap().as_bool(), Some(true));
@@ -133,7 +132,6 @@ mod tests {
 
         remove_border_weights(&mut tree).unwrap();
 
-        // All nested border weights should be removed
         assert!(tree["children"][0].get("borderTopWeight").is_none());
         assert!(tree["children"][0].get("borderBottomWeight").is_none());
         assert_eq!(tree["children"][0]["name"].as_str(), Some("Child1"));
@@ -180,7 +178,6 @@ mod tests {
 
         remove_border_weights(&mut tree).unwrap();
 
-        // Other border properties should be preserved
         assert!(tree.get("borderTopWeight").is_none());
         assert_eq!(tree.get("borderRadius").unwrap().as_f64(), Some(5.0));
         assert_eq!(tree.get("borderColor").unwrap().as_str(), Some("#ff0000"));
@@ -209,7 +206,6 @@ mod tests {
 
         remove_border_weights(&mut tree).unwrap();
 
-        // All border weights in all array elements should be removed
         assert!(tree["shapes"][0].get("borderTopWeight").is_none());
         assert!(tree["shapes"][0].get("borderBottomWeight").is_none());
         assert_eq!(tree["shapes"][0]["type"].as_str(), Some("rectangle"));
@@ -234,7 +230,6 @@ mod tests {
 
         remove_border_weights(&mut tree).unwrap();
 
-        // Even zero-value border weights should be removed
         assert!(tree.get("borderTopWeight").is_none());
         assert!(tree.get("borderBottomWeight").is_none());
         assert!(tree.get("borderLeftWeight").is_none());

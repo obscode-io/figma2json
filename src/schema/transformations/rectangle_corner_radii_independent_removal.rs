@@ -196,7 +196,6 @@ mod tests {
         assert_eq!(tree.get("cornerRadius").unwrap().as_f64(), Some(16.0));
         assert!(tree.get("fillPaints").is_some());
         assert!(tree.get("size").is_some());
-        // Specific radii should be preserved
         assert!(tree.get("rectangleTopLeftCornerRadius").is_some());
         assert!(tree.get("rectangleTopRightCornerRadius").is_some());
     }

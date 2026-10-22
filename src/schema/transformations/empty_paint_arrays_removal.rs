@@ -268,19 +268,15 @@ mod tests {
 
         let children = tree.get("children").unwrap().as_array().unwrap();
 
-        // Child 0: empty fills removed, strokes preserved
         assert!(children[0].get("fillPaints").is_none());
         assert!(children[0].get("strokePaints").is_some());
 
-        // Child 1: fills preserved, empty strokes removed
         assert!(children[1].get("fillPaints").is_some());
         assert!(children[1].get("strokePaints").is_none());
 
-        // Child 2: both empty arrays removed
         assert!(children[2].get("fillPaints").is_none());
         assert!(children[2].get("strokePaints").is_none());
 
-        // Child 3: both preserved
         assert!(children[3].get("fillPaints").is_some());
         assert!(children[3].get("strokePaints").is_some());
     }

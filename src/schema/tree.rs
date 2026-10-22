@@ -23,15 +23,12 @@ use std::collections::HashMap;
 /// let root = build_tree(node_changes).unwrap();
 /// ```
 pub fn build_tree(node_changes: Vec<JsonValue>) -> Result<JsonValue> {
-    // 1. Create map: GUID -> Node and map of parent -> children (position, GUID) tuples.
-    // Nodes are moved (not cloned) into the map; large files have hundreds of MB here.
     let mut nodes: HashMap<String, JsonValue> = HashMap::with_capacity(node_changes.len());
     let mut parent_to_children: HashMap<String, Vec<(String, String)>> = HashMap::new();
 
     for node in node_changes {
         let guid = format_guid(&node)?;
 
-        // 2. Record the parent-child relationship (position and GUID)
         if let Some(parent_index) = node.get("parentIndex") {
             let parent_guid = format_parent_guid(parent_index)?;
             let position = parent_index
@@ -49,12 +46,10 @@ pub fn build_tree(node_changes: Vec<JsonValue>) -> Result<JsonValue> {
         nodes.insert(guid, node);
     }
 
-    // 3. Sort children by position
     for children in parent_to_children.values_mut() {
         children.sort_by(|a, b| a.0.cmp(&b.0));
     }
 
-    // 4. Build tree recursively from root
     build_node_tree("0:0", &mut nodes, &parent_to_children)
 }
 
@@ -64,16 +59,13 @@ fn build_node_tree(
     nodes: &mut HashMap<String, JsonValue>,
     parent_to_children: &HashMap<String, Vec<(String, String)>>,
 ) -> Result<JsonValue> {
-    // Get the node
     let mut node = nodes
         .remove(guid)
         .ok_or_else(|| FigError::InvalidDocument(format!("Node {} not found", guid)))?;
 
-    // Remove parentIndex
     if let Some(obj) = node.as_object_mut() {
         obj.remove("parentIndex");
 
-        // Add children recursively
         if let Some(child_entries) = parent_to_children.get(guid) {
             let mut children = Vec::new();
             for (_position, child_guid) in child_entries {
@@ -190,10 +182,8 @@ mod tests {
 
         let root = build_tree(node_changes).unwrap();
 
-        // Check root
         assert_eq!(root.get("name").and_then(|v| v.as_str()), Some("Root"));
 
-        // Check children
         let children = root.get("children").and_then(|v| v.as_array()).unwrap();
         assert_eq!(children.len(), 2);
         assert_eq!(
@@ -205,7 +195,6 @@ mod tests {
             Some("Child2")
         );
 
-        // Check parentIndex is removed
         assert!(children[0].get("parentIndex").is_none());
     }
 
@@ -220,7 +209,7 @@ mod tests {
                 "guid": {"sessionID": 0, "localID": 1},
                 "parentIndex": {
                     "guid": {"sessionID": 0, "localID": 0},
-                    "position": "z"  // Should be last
+                    "position": "z"
                 },
                 "name": "Third"
             }),
@@ -228,7 +217,7 @@ mod tests {
                 "guid": {"sessionID": 0, "localID": 2},
                 "parentIndex": {
                     "guid": {"sessionID": 0, "localID": 0},
-                    "position": "a"  // Should be first
+                    "position": "a"
                 },
                 "name": "First"
             }),
@@ -236,7 +225,7 @@ mod tests {
                 "guid": {"sessionID": 0, "localID": 3},
                 "parentIndex": {
                     "guid": {"sessionID": 0, "localID": 0},
-                    "position": "m"  // Should be second
+                    "position": "m"
                 },
                 "name": "Second"
             }),
@@ -245,7 +234,6 @@ mod tests {
         let root = build_tree(node_changes).unwrap();
         let children = root.get("children").and_then(|v| v.as_array()).unwrap();
 
-        // Check sorted order
         assert_eq!(
             children[0].get("name").and_then(|v| v.as_str()),
             Some("First")

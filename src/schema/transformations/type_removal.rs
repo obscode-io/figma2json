@@ -202,7 +202,6 @@ mod tests {
         assert!(tree.get("transform").is_some());
         assert!(tree.get("fillPaints").is_some());
 
-        // Note: type is removed recursively, including from nested paint objects
         let paints = tree.get("fillPaints").unwrap().as_array().unwrap();
         assert!(paints[0].get("type").is_none());
         assert_eq!(paints[0].get("color").unwrap().as_str(), Some("#ffffff"));

@@ -56,10 +56,8 @@ mod tests {
 
         remove_root_blobs(&mut output).unwrap();
 
-        // Blobs field should be removed
         assert!(output.get("blobs").is_none());
 
-        // Other fields should be preserved
         assert_eq!(output.get("version").unwrap().as_i64(), Some(48));
         assert_eq!(output.get("fileType").unwrap().as_str(), Some("figma"));
         assert!(output.get("document").is_some());
@@ -84,7 +82,6 @@ mod tests {
             }
         });
 
-        // Should not fail if blobs is already missing
         remove_root_blobs(&mut output).unwrap();
 
         assert!(output.get("blobs").is_none());
@@ -111,10 +108,8 @@ mod tests {
 
         remove_root_blobs(&mut output).unwrap();
 
-        // Only blobs should be removed
         assert!(output.get("blobs").is_none());
 
-        // All other fields preserved
         assert_eq!(output.get("version").unwrap().as_i64(), Some(50));
         assert_eq!(output.get("fileType").unwrap().as_str(), Some("figma"));
         assert!(output.get("document").is_some());
@@ -134,10 +129,8 @@ mod tests {
     fn test_remove_root_blobs_not_an_object() {
         let mut output = json!([1, 2, 3]);
 
-        // Should not fail on non-object input
         remove_root_blobs(&mut output).unwrap();
 
-        // Array should remain unchanged
         assert_eq!(output.as_array().unwrap().len(), 3);
     }
 }

@@ -79,7 +79,6 @@ mod tests {
         remove_empty_font_postscript(&mut tree).unwrap();
 
         let font_name = tree.get("fontName").unwrap();
-        // Non-empty postscript should be preserved
         assert_eq!(
             font_name.get("postscript").unwrap().as_str(),
             Some("Helvetica-Bold")
@@ -101,7 +100,6 @@ mod tests {
         remove_empty_font_postscript(&mut tree).unwrap();
 
         let font_name = tree.get("fontName").unwrap();
-        // fontName without postscript should be unchanged
         assert!(font_name.get("postscript").is_none());
         assert_eq!(font_name.get("family").unwrap().as_str(), Some("Arial"));
         assert_eq!(font_name.get("style").unwrap().as_str(), Some("Regular"));
@@ -117,7 +115,6 @@ mod tests {
 
         remove_empty_font_postscript(&mut tree).unwrap();
 
-        // Tree without fontName should be unchanged
         assert_eq!(tree.get("name").unwrap().as_str(), Some("Rectangle"));
         assert_eq!(tree.get("width").unwrap().as_i64(), Some(100));
         assert!(tree.get("fontName").is_none());
@@ -146,7 +143,6 @@ mod tests {
 
         remove_empty_font_postscript(&mut tree).unwrap();
 
-        // Both empty postscripts should be removed
         assert!(tree["children"][0]["fontName"].get("postscript").is_none());
         assert_eq!(
             tree["children"][0]["fontName"]["family"].as_str(),
@@ -182,7 +178,6 @@ mod tests {
 
         remove_empty_font_postscript(&mut tree).unwrap();
 
-        // Empty postscript removed, non-empty preserved
         assert!(tree["children"][0]["fontName"].get("postscript").is_none());
         assert_eq!(
             tree["children"][1]["fontName"]["postscript"].as_str(),
@@ -226,7 +221,6 @@ mod tests {
 
         remove_empty_font_postscript(&mut tree).unwrap();
 
-        // Non-string postscript should be preserved
         let font_name = tree.get("fontName").unwrap();
         assert!(font_name.get("postscript").is_some());
         assert_eq!(font_name.get("postscript").unwrap().as_i64(), Some(123));

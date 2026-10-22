@@ -224,7 +224,6 @@ fn variable_set_ref(set: &JsonValue) -> Option<String> {
 /// Public name for an internal node type, if it differs.
 fn public_type(node_type: &str, is_state_group: bool) -> Option<&'static str> {
     match node_type {
-        // Component sets are stored as FRAME (sometimes SYMBOL) nodes with isStateGroup
         "FRAME" | "SYMBOL" if is_state_group => Some("COMPONENT_SET"),
         "SYMBOL" => Some("COMPONENT"),
         "ROUNDED_RECTANGLE" => Some("RECTANGLE"),
@@ -270,7 +269,6 @@ impl Annotator<'_> {
                     if let Some(id) = wrapped_ref(item, self.index) {
                         *item = id_or_null(id);
                     } else if let Some(id) = bare_guid(item) {
-                        // Unlike object fields, list entries keep the sentinel as a string.
                         *item = JsonValue::String(id);
                     } else {
                         self.annotate(item, in_node_position, counting);
@@ -281,6 +279,13 @@ impl Annotator<'_> {
         }
     }
 
+    /// Annotate one object and recurse into its values.
+    ///
+    /// Nodes on internal-only pages (definitions: variables, styles and local
+    /// copies of library components) are annotated but not counted in `uses`.
+    /// `{guid: {...}}` / `{assetRef: {key}}` wrappers (instance-swap and slot
+    /// values, aliases, collection ids) are replaced with the id, or
+    /// `remove_guid_fields` would empty them and the value would be lost.
     fn annotate_object(
         &mut self,
         obj: &mut Map<String, JsonValue>,
@@ -289,26 +294,19 @@ impl Annotator<'_> {
     ) {
         let is_node = in_node_position && obj.contains_key("guid") && obj.contains_key("type");
 
-        // Internal-only pages hold definitions (variables, styles, and local copies of
-        // library components), not the design itself: annotate them (they can be kept
-        // with `keep_internal`) but don't count them in `uses`.
         let counting = counting && !(is_node && is_true(obj, "internalOnly"));
 
         if is_node {
             annotate_node(obj, self.index);
         }
-        // Shared styles (on nodes, and inside instance overrides)
         self.annotate_styles(obj, counting);
         self.annotate_alias(obj, counting);
         flatten_guid_path(obj);
 
         for (key, child) in obj.iter_mut() {
             if key == "guid" && is_node {
-                continue; // removed later by remove_guid_fields; `id` replaces it
+                continue;
             }
-            // {guid: {...}} / {assetRef: {key}} wrappers (instance-swap and slot values,
-            // aliases, collection ids): replace with the id, or remove_guid_fields would
-            // empty them and the value would be lost.
             if let Some(id) = wrapped_ref(child, self.index).or_else(|| bare_guid(child)) {
                 *child = id_or_null(id);
             } else {
@@ -411,7 +409,6 @@ fn variable_value(data: &JsonValue, index: &Index) -> JsonValue {
             None => json!({"alias": null}),
         };
     }
-    // {"colorValue": "#fff"} / {"floatValue": 4} / {"textValue": ".."} / {"boolValue": true}
     match value.as_object().filter(|obj| obj.len() == 1) {
         Some(obj) => obj.values().next().cloned().unwrap_or(JsonValue::Null),
         None => value.clone(),
@@ -661,7 +658,6 @@ pub fn add_design_context(document: &mut JsonValue) -> Result<DesignDefinitions>
     } = Definitions::collect(document, &index);
     nest_variables(&mut collections, variables);
 
-    // Annotate the design tree, counting how often each variable and style is used
     let mut annotator = Annotator {
         index: &index,
         uses: HashMap::new(),
@@ -669,7 +665,6 @@ pub fn add_design_context(document: &mut JsonValue) -> Result<DesignDefinitions>
     annotator.annotate(document, true, true);
     record_uses(&mut collections, &mut styles, &annotator.uses);
 
-    // Text styles: make lineHeight / letterSpacing CSS-like, as for nodes.
     let mut styles = JsonValue::Array(styles);
     crate::schema::simplify_text_properties(&mut styles)?;
 
@@ -737,7 +732,6 @@ mod tests {
         assert_eq!(set["type"], "COMPONENT_SET");
         assert_eq!(set["children"][0]["type"], "COMPONENT");
         assert_eq!(doc["children"][0]["children"][2]["type"], "RECTANGLE");
-        // guid kept for remove_guid_fields to delete later
         assert!(set.get("guid").is_some());
     }
 
@@ -816,7 +810,6 @@ mod tests {
             .find(|v| v["name"] == "master/blue")
             .unwrap()
             .clone();
-        // aliased by brand/primary on the internal page, but not used by the design
         assert_eq!(blue["uses"], 0);
     }
 
@@ -838,7 +831,6 @@ mod tests {
         assert_eq!(a[0]["varValue"]["value"]["symbolIdValue"], "91:157");
         assert_eq!(a[0]["defID"], "4:2");
         assert_eq!(a[1]["varValue"]["value"]["symbolIdValue"], "5:5");
-        // unresolvable library reference is left untouched
         assert_eq!(
             a[2]["varValue"]["value"]["symbolIdValue"]["assetRef"]["key"],
             "unknown"

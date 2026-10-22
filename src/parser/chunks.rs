@@ -37,7 +37,6 @@ const CANVAS_ENTRY: &str = "canvas.fig";
 pub fn extract_from_zip(bytes: &[u8]) -> Result<Vec<u8>> {
     let mut archive = ZipArchive::new(Cursor::new(bytes))?;
 
-    // First entry named "canvas.fig"
     for i in 0..archive.len() {
         let mut file = archive.by_index(i)?;
         if file.name() == CANVAS_ENTRY {
@@ -81,7 +80,6 @@ pub fn extract_zip_to_directory(bytes: &[u8], target_dir: &Path) -> Result<()> {
 
     for i in 0..archive.len() {
         let mut file = archive.by_index(i)?;
-        // `enclosed_name` rejects paths that would escape `target_dir`
         let Some(output_path) = file.enclosed_name().map(|name| target_dir.join(name)) else {
             continue;
         };
@@ -133,18 +131,15 @@ pub fn extract_zip_to_directory(bytes: &[u8], target_dir: &Path) -> Result<()> {
 /// println!("Chunks: {}", parsed.chunks.len());
 /// ```
 pub fn extract_chunks(bytes: &[u8]) -> Result<ParsedFile> {
-    // Version follows the 8-byte magic header (present iff the file has MIN_FILE_SIZE bytes)
     let version = read_u32_le(bytes, 8).ok_or(FigError::FileTooSmall {
         expected: MIN_FILE_SIZE,
         actual: bytes.len(),
     })?;
 
-    // Chunks start at offset 12. Trailing bytes too short for a chunk header are ignored.
     let mut chunks = Vec::new();
     let mut offset = MIN_FILE_SIZE;
 
     while let Some(chunk_length) = read_u32_le(bytes, offset) {
-        // u32 -> usize is lossless on every target with at least 32-bit pointers
         let chunk_length = chunk_length as usize;
         let start = offset + CHUNK_HEADER_SIZE;
         let chunk = bytes[start..]
@@ -159,7 +154,6 @@ pub fn extract_chunks(bytes: &[u8]) -> Result<ParsedFile> {
         offset = start + chunk_length;
     }
 
-    // Validate we have at least 2 chunks (schema + data)
     if chunks.len() < 2 {
         return Err(FigError::NotEnoughChunks {
             expected: 2,
@@ -183,20 +177,15 @@ mod tests {
 
     #[test]
     fn test_extract_chunks_minimal() {
-        // Create a minimal valid .fig file structure
         let mut bytes = Vec::new();
 
-        // Magic header
         bytes.extend_from_slice(b"fig-kiwi");
 
-        // Version (48, little-endian)
         bytes.extend_from_slice(&48u32.to_le_bytes());
 
-        // Chunk 0: length 5
         bytes.extend_from_slice(&5u32.to_le_bytes());
         bytes.extend_from_slice(b"chunk");
 
-        // Chunk 1: length 4
         bytes.extend_from_slice(&4u32.to_le_bytes());
         bytes.extend_from_slice(b"data");
 
@@ -209,13 +198,11 @@ mod tests {
 
     #[test]
     fn test_extract_chunks_multiple() {
-        // Test with multiple chunks (schema + data + images)
         let mut bytes = Vec::new();
 
         bytes.extend_from_slice(b"fig-kiwi");
         bytes.extend_from_slice(&101u32.to_le_bytes());
 
-        // Three chunks
         for i in 0..3 {
             let chunk_data = format!("chunk{}", i);
             bytes.extend_from_slice(&(chunk_data.len() as u32).to_le_bytes());
@@ -245,7 +232,6 @@ mod tests {
         bytes.extend_from_slice(b"fig-kiwi");
         bytes.extend_from_slice(&48u32.to_le_bytes());
 
-        // Chunk with length 100 but only 5 bytes of data
         bytes.extend_from_slice(&100u32.to_le_bytes());
         bytes.extend_from_slice(b"short");
 
@@ -264,7 +250,6 @@ mod tests {
         bytes.extend_from_slice(b"fig-kiwi");
         bytes.extend_from_slice(&48u32.to_le_bytes());
 
-        // Only one chunk (need at least 2)
         bytes.extend_from_slice(&5u32.to_le_bytes());
         bytes.extend_from_slice(b"chunk");
 

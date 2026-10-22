@@ -115,7 +115,6 @@ pub mod user_facing_version_removal;
 pub mod visible_only_objects_removal;
 mod walk;
 
-// Re-export commonly used functions
 pub use background_properties_removal::remove_background_properties;
 pub use blobs_removal::remove_root_blobs;
 pub use border_weights_removal::remove_border_weights;

@@ -36,7 +36,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 1.88 is the `rust-version` (MSRV) declared in Cargo.toml
         toolchain: [stable, "1.88"]
     steps:
       - uses: actions/checkout@v4

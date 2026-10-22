@@ -29,7 +29,6 @@ def slug(s, n=60):
     return (re.sub(r"[^a-z0-9]+", "-", str(s).lower()).strip("-") or "untitled")[:n]
 
 
-# defId -> component property name, filled in by main() from every componentPropDefs in the file
 PROP_NAMES = {}
 
 
@@ -175,14 +174,11 @@ def dump(obj, path):
     return os.path.getsize(path)
 
 
-# ---------------------------------------------------------------- tokens
-
 def tokens_files(doc, out, used_only=False, library_names=None, page=None):
     library_names = library_names or {}
     cols = json.loads(json.dumps(doc.get("variables", [])))
     styles = json.loads(json.dumps(doc.get("styles", [])))
     if page is not None:
-        # Count uses on this page only (the file-wide counts include drafts and old screens)
         var_uses, style_uses = collections.Counter(), collections.Counter()
         style_keys = ("fillStyle", "strokeStyle", "textStyle", "effectStyle", "gridStyle")
 
@@ -203,12 +199,10 @@ def tokens_files(doc, out, used_only=False, library_names=None, page=None):
             for v in c["variables"]:
                 v["uses"] = var_uses[v["id"]]
             c["uses"] = sum(v["uses"] for v in c["variables"])
-        # styles are matched by name; when a name exists in several libraries, credit the first
         credited = set()
         for st in sorted(styles, key=lambda st: -st.get("uses", 0)):
             st["uses"] = 0 if st["name"] in credited else style_uses[st["name"]]
             credited.add(st["name"])
-    # How many variables alias each variable (primitives are used through semantic tokens)
     aliased = collections.Counter()
     for c in cols:
         for v in c["variables"]:
@@ -219,7 +213,6 @@ def tokens_files(doc, out, used_only=False, library_names=None, page=None):
         for v in c["variables"]:
             v["aliasedBy"] = aliased[(c["name"], v["name"])]
     if used_only:
-        # Keep variables used directly, plus everything they alias (transitively, same library)
         lib_of = lambda c: c.get("sourceLibraryKey", "local")
         by_name = {(lib_of(c), c["name"], v["name"]): v["id"] for c in cols for v in c["variables"]}
         var_by_id = {v["id"]: (c, v) for c in cols for v in c["variables"]}
@@ -240,7 +233,7 @@ def tokens_files(doc, out, used_only=False, library_names=None, page=None):
         key = item.get("sourceLibraryKey")
         if not key:
             return library_names.get("local", "local")
-        short = key[:11]  # "lk-" + 8 hex chars: stable across files
+        short = key[:11]
         return library_names.get(short, short)
 
     libs = collections.OrderedDict()
@@ -294,8 +287,6 @@ def tokens_files(doc, out, used_only=False, library_names=None, page=None):
     open(f"{out}/TOKENS.md", "w").write("\n".join(L) + "\n")
     return len(cols), sum(len(c["variables"]) for c in cols), len(styles)
 
-
-# ---------------------------------------------------------------- design system
 
 def build_design_system(doc, out, library_names=None):
     root = doc["document"]
@@ -368,8 +359,6 @@ def build_design_system(doc, out, library_names=None):
             "libraryComponents": library, "icons": ds_icons}
 
 
-# ---------------------------------------------------------------- screens
-
 def override_texts(n):
     """Texts set on an instance through overrides (instances have no children)."""
     out = []
@@ -410,8 +399,6 @@ def canvas_rows(children, gap=300):
 def is_title_card(n):
     return n.get("type") == "INSTANCE" and n.get("name", "").strip().lower() == "title"
 
-
-# ---------------------------------------------------------------- icons (SVG)
 
 def _fmt(v):
     return f"{v:.3f}".rstrip("0").rstrip(".")
@@ -549,7 +536,6 @@ def icon_svg(component, defs):
             iw, ih = (n.get("size") or {}).get("x") or tw, (n.get("size") or {}).get("y") or th
             inner = []
             box(target, inner)
-            # this instance's own overrides, plus the enclosing ones that reach inside it
             sub = {k[len(path) + 1:]: v for k, v in ov.items() if k.startswith(path + "/")}
             for o2 in (n.get("symbolData") or {}).get("symbolOverrides") or []:
                 if o2.get("targetId"):
@@ -564,13 +550,13 @@ def icon_svg(component, defs):
             ok = all(visit(c, inner, ov, prefix) for c in n.get("children", []) or [])
             out.append(("g", f"translate({_fmt(x)} {_fmt(y)})", inner))
             return ok
-        return False  # text, images, ellipses, boolean operations: not a plain icon
+        return False
 
     box(component, elements)
     if not all(visit(c, elements) for c in component.get("children", []) or []):
         return None
     if not flags["vector"] or flags["image"]:
-        return None  # plain boxes (skeletons, overlays) and image placeholders are not icons
+        return None
     single = len(colors) == 1
     tokens = set()
 
@@ -721,12 +707,10 @@ def build_screens(doc, out, page_name, library_names=None):
         sys.exit(f"Page {page_name!r} not found. Pages: {list(pages)}")
     page = pages[page_name]
 
-    # Collect screens per flow (Section), ordered on the canvas, with Title cards as group headings
     owner, screens, connectors, notes, sections = {}, [], [], [], {}
     for g in page.get("children", []):
         flow = g["name"] if g.get("type") == "SECTION" else "(no section)"
         if g.get("type") == "SECTION":
-            # a connector may point at a whole section (= the flow) instead of a screen
             owner[g.get("id")] = (flow, g.get("id"))
             sections[g.get("id")] = flow
         children = g.get("children", []) if g.get("type") == "SECTION" else [g]
@@ -740,14 +724,12 @@ def build_screens(doc, out, page_name, library_names=None):
                 if s.get("type") not in ("FRAME", "COMPONENT", "INSTANCE", "SECTION", "COMPONENT_SET"):
                     continue
                 if "<->" in s.get("name", ""):
-                    # designer annotation such as "button <-> Settings / Team & Roles / Invite member modal"
                     notes.append({"flow": flow, "group": group, "id": s["id"], "note": s["name"]})
                     continue
                 screens.append((flow, group, s))
                 for n, _ in walk(s):
                     owner[n.get("id")] = (flow, s["id"])
 
-    # Flow arrows drawn with connectors. The arrowhead marks the destination.
     links = []
     for flow, c in connectors:
         a, b = c.get("connectorStart") or {}, c.get("connectorEnd") or {}
@@ -764,7 +746,6 @@ def build_screens(doc, out, page_name, library_names=None):
         else:
             src, dst, via = sa, sb, a.get("endpointNodeID")
         links.append({"source": "connector", "flow": flow, "from": src[1], "fromNode": via, "to": dst[1], "toFlow": dst[0]})
-    # Prototype links between screens (if any)
     for flow, group, s in screens:
         for n, _ in walk(s):
             for inter in n.get("prototypeInteractions", []) or []:
@@ -778,7 +759,6 @@ def build_screens(doc, out, page_name, library_names=None):
     nodes_by_id = {n.get("id"): n for n, _ in walk(root) if n.get("id")}
     index, comp_use = [], collections.defaultdict(collections.Counter)
     for flow, group, s in screens:
-        # the node id in the name keeps file names unique
         fn = f"flows/{slug(flow)}/{slug(s['name'])}__{s['id'].replace(':', '-')}.json"
         kb = dump(prune(s), f"{out}/{fn}") // 1024
         for n, _ in walk(s):
@@ -790,7 +770,6 @@ def build_screens(doc, out, page_name, library_names=None):
                       "linksTo": sorted({l["to"] for l in links if l["from"] == s["id"]}),
                       "linkedFrom": sorted({l["from"] for l in links if l["to"] == s["id"]})})
     library, component_nodes = export_used_components(root, page, out)
-    # Active navigation on each screen: instances of tab/sidebar-like components in their Active variant
     for (flow, group, s), entry in zip(screens, index):
         active = []
         for x, _ in walk(s):
@@ -808,7 +787,6 @@ def build_screens(doc, out, page_name, library_names=None):
                 active.append(f"{x.get('componentSetName') or x.get('name')}: {label[:30]}")
         entry["active"] = list(dict.fromkeys(active))[:4]
 
-    # Screens that share a name (e.g. nine "Clients"): show the texts only that version has
     def all_texts(node):
         out = set()
         for x, _ in walk(node):
@@ -831,7 +809,6 @@ def build_screens(doc, out, page_name, library_names=None):
             entry["differsBy"] = sorted(texts[s["id"]] - others, key=len)[:4]
     json.dump({"page": page_name, "screens": index, "links": links, "notes": notes},
               open(f"{out}/index.json", "w"), indent=1, ensure_ascii=False)
-    # Count token use on the page and inside the components it uses (agents build both)
     tokens_files(doc, out, used_only=True, library_names=library_names,
                  page={"children": [page] + component_nodes})
 
@@ -896,7 +873,7 @@ if __name__ == "__main__":
             if d.get("id") and d.get("name"):
                 PROP_NAMES[d["id"]] = d["name"]
             elif d.get("id") and d.get("parentPropDefId"):
-                parents[d["id"]] = d["parentPropDefId"]  # variant-level def -> the set's named def
+                parents[d["id"]] = d["parentPropDefId"]
     for def_id, parent in parents.items():
         seen_ids = set()
         while parent in parents and parent not in seen_ids:

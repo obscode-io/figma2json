@@ -144,7 +144,6 @@ fn main() -> Result<()> {
     }
 
     if figma2json::parser::is_zip_container(&bytes) {
-        // ZIP mode: an output directory is required and -o is not allowed
         let extract_dir = cli.extract_dir.as_deref().ok_or_else(|| {
             anyhow!(
                 "{} is a ZIP archive (as saved by Figma). Give an output directory: figma2json {} <output-dir>",
@@ -167,7 +166,6 @@ fn main() -> Result<()> {
 fn convert_input(cli: &Cli, bytes: &[u8]) -> Result<()> {
     let (output, base_dir) = match cli.output.as_deref() {
         Some(path) => (Output::File(path), path.parent()),
-        // Writing to stdout: images are looked up in the current directory
         None => (Output::Stdout, Some(Path::new("."))),
     };
     let raw_output = cli
@@ -216,7 +214,6 @@ fn convert_zip(cli: &Cli, zip_bytes: &[u8], extract_dir: &Path) -> Result<()> {
         let output = fig_path.with_extension("json");
         let raw_output = fig_path.with_extension("raw.json");
 
-        // Images extracted from the archive sit next to the .fig file
         convert_one(
             cli,
             source,
@@ -236,6 +233,9 @@ fn convert_zip(cli: &Cli, zip_bytes: &[u8], extract_dir: &Path) -> Result<()> {
 
 /// Convert one .fig file and write its JSON to `output`; with `--raw`, also write
 /// the untransformed JSON to `raw_output`.
+///
+/// The transformed JSON is freed before the raw one is built, so the two are
+/// never in memory at the same time.
 fn convert_one(
     cli: &Cli,
     source: Source<'_>,
@@ -250,7 +250,6 @@ fn convert_one(
     let json = figma2json::convert_with_options(bytes, base_dir, &cli.convert_options())
         .with_context(|| source.conversion_failed(false))?;
     write_output(cli, source, output, &json, false)?;
-    // Free the transformed document before building the raw one
     drop(json);
 
     if cli.raw {

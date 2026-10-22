@@ -205,7 +205,6 @@ mod tests {
 
         remove_text_metadata_fields(&mut tree).unwrap();
 
-        // All metadata fields removed
         assert!(tree.get("textBidiVersion").is_none());
         assert!(tree.get("textExplicitLayoutVersion").is_none());
         assert!(tree.get("textUserLayoutVersion").is_none());
@@ -218,7 +217,6 @@ mod tests {
         assert!(tree.get("autoRename").is_none());
         assert!(tree.get("textTracking").is_none());
 
-        // Other fields preserved
         assert_eq!(tree.get("name").unwrap().as_str(), Some("ComplexText"));
         assert_eq!(tree.get("fontSize").unwrap().as_f64(), Some(128.0));
     }
@@ -248,7 +246,6 @@ mod tests {
 
         remove_text_metadata_fields(&mut tree).unwrap();
 
-        // Check first nested text
         assert!(tree["children"][0].get("textBidiVersion").is_none());
         assert!(tree["children"][0].get("autoRename").is_none());
         assert_eq!(
@@ -256,7 +253,6 @@ mod tests {
             Some("Child1")
         );
 
-        // Check deeply nested text
         let deep_child = &tree["children"][1]["children"][0];
         assert!(deep_child.get("textUserLayoutVersion").is_none());
         assert!(deep_child.get("textTracking").is_none());
@@ -274,7 +270,6 @@ mod tests {
 
         remove_text_metadata_fields(&mut tree).unwrap();
 
-        // Tree without text metadata should be unchanged
         assert_eq!(tree.get("name").unwrap().as_str(), Some("Rectangle"));
         assert_eq!(tree.get("width").unwrap().as_i64(), Some(100));
         assert_eq!(tree.get("height").unwrap().as_i64(), Some(200));
@@ -299,11 +294,9 @@ mod tests {
 
         remove_text_metadata_fields(&mut tree).unwrap();
 
-        // Metadata removed
         assert!(tree.get("autoRename").is_none());
         assert!(tree.get("textTracking").is_none());
 
-        // Important fields preserved
         assert_eq!(tree.get("name").unwrap().as_str(), Some("Hello"));
         assert!(tree.get("fontName").is_some());
         assert_eq!(tree.get("fontSize").unwrap().as_f64(), Some(128.0));

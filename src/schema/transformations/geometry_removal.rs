@@ -215,7 +215,6 @@ mod tests {
 
         remove_geometry_fields(&mut tree).unwrap();
 
-        // Children geometries should be removed
         assert!(tree["children"][0].get("fillGeometry").is_none());
         assert_eq!(
             tree["children"][0].get("name").unwrap().as_str(),
@@ -295,7 +294,6 @@ mod tests {
 
         remove_geometry_fields(&mut tree).unwrap();
 
-        // Tree without geometry fields should be unchanged
         assert!(tree.get("fillGeometry").is_none());
         assert!(tree.get("strokeGeometry").is_none());
         assert_eq!(tree.get("name").unwrap().as_str(), Some("Simple"));
@@ -323,13 +321,11 @@ mod tests {
 
         remove_geometry_fields(&mut tree).unwrap();
 
-        // All geometries should be removed at all levels
         assert!(tree["document"].get("fillGeometry").is_none());
         assert!(tree["document"]["children"][0]["children"][0]
             .get("strokeGeometry")
             .is_none());
 
-        // Other fields should be preserved
         assert_eq!(
             tree["document"]["children"][0]["children"][0]
                 .get("name")
@@ -345,7 +341,6 @@ mod tests {
 
         remove_geometry_fields(&mut tree).unwrap();
 
-        // Empty object should remain empty
         assert_eq!(tree.as_object().unwrap().len(), 0);
     }
 
@@ -377,7 +372,6 @@ mod tests {
 
         remove_geometry_fields(&mut tree).unwrap();
 
-        // Geometry should be preserved for icons with exportSettings
         assert!(tree.get("fillGeometry").is_some());
         assert_eq!(tree.get("name").unwrap().as_str(), Some("icon/ai"));
     }
@@ -410,7 +404,6 @@ mod tests {
 
         remove_geometry_fields(&mut tree).unwrap();
 
-        // Geometry should be preserved for PNG icons
         assert!(tree.get("strokeGeometry").is_some());
         assert_eq!(
             tree.get("name").unwrap().as_str(),
@@ -432,7 +425,6 @@ mod tests {
 
         remove_geometry_fields(&mut tree).unwrap();
 
-        // Geometry should be preserved based on name pattern alone
         assert!(tree.get("fillGeometry").is_some());
         assert_eq!(tree.get("name").unwrap().as_str(), Some("icon/star"));
     }
@@ -457,7 +449,6 @@ mod tests {
 
         remove_geometry_fields(&mut tree).unwrap();
 
-        // Geometry should be preserved for arrows
         assert!(tree.get("fillGeometry").is_some());
         assert!(tree.get("strokeGeometry").is_some());
         assert_eq!(tree.get("name").unwrap().as_str(), Some("arrows/left"));
@@ -477,7 +468,6 @@ mod tests {
 
         remove_geometry_fields(&mut tree).unwrap();
 
-        // Geometry should be removed for regular elements
         assert!(tree.get("fillGeometry").is_none());
         assert_eq!(tree.get("name").unwrap().as_str(), Some("Button"));
     }
@@ -510,14 +500,12 @@ mod tests {
 
         remove_geometry_fields(&mut tree).unwrap();
 
-        // Icon should preserve geometry
         assert!(tree["children"][0].get("fillGeometry").is_some());
         assert_eq!(
             tree["children"][0].get("name").unwrap().as_str(),
             Some("icon/home")
         );
 
-        // Button should have geometry removed
         assert!(tree["children"][1].get("fillGeometry").is_none());
         assert_eq!(
             tree["children"][1].get("name").unwrap().as_str(),
@@ -557,10 +545,6 @@ mod tests {
 
         remove_geometry_fields(&mut tree).unwrap();
 
-        // Node-level geometry should be preserved due to exportSettings
-        // But derivedSymbolData is an array, so it gets recursed differently
-        // The geometry in derivedSymbolData should be removed because derivedSymbolData elements
-        // themselves don't have exportSettings
         assert!(tree["derivedSymbolData"][0].get("fillGeometry").is_none());
     }
 
@@ -589,7 +573,6 @@ mod tests {
 
         remove_geometry_fields(&mut tree).unwrap();
 
-        // All geometry fields should be preserved for icons
         assert!(tree.get("fillGeometry").is_some());
         assert!(tree.get("strokeGeometry").is_some());
         assert!(tree.get("windingRule").is_some());
@@ -617,7 +600,6 @@ mod tests {
 
         remove_geometry_fields(&mut tree).unwrap();
 
-        // Button should have geometry removed even if it has icon children in symbolOverrides
         assert!(tree.get("fillGeometry").is_none());
         assert_eq!(tree.get("name").unwrap().as_str(), Some("Button"));
     }

@@ -44,7 +44,6 @@ const TEXT_PROPERTIES: [&str; 2] = ["letterSpacing", "lineHeight"];
 /// assert_eq!(tree.get("lineHeight").unwrap().as_str(), Some("20px"));
 /// ```
 pub fn simplify_text_properties(tree: &mut JsonValue) -> Result<()> {
-    // Replaced values become strings, so the walker has nothing left to visit in them.
     for_each_object_mut(tree, &mut |map| {
         for property in TEXT_PROPERTIES {
             let css_value = match map.get(property) {
@@ -352,14 +351,12 @@ mod tests {
 
         simplify_text_properties(&mut tree).unwrap();
 
-        // letterSpacing and lineHeight should be unchanged (not matching structure)
         assert_eq!(
             tree.get("letterSpacing").unwrap().as_str(),
             Some("already-simple")
         );
         assert_eq!(tree.get("lineHeight").unwrap().as_f64(), Some(1.5));
 
-        // otherProperty should be unchanged (not letterSpacing or lineHeight)
         assert!(tree.get("otherProperty").unwrap().is_object());
     }
 

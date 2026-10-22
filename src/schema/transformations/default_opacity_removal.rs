@@ -69,7 +69,6 @@ mod tests {
 
         remove_default_opacity(&mut tree).unwrap();
 
-        // Non-1.0 opacity should be preserved
         assert_eq!(tree.get("opacity").unwrap().as_f64(), Some(0.5));
         assert_eq!(tree.get("name").unwrap().as_str(), Some("Shape"));
     }
@@ -83,7 +82,6 @@ mod tests {
 
         remove_default_opacity(&mut tree).unwrap();
 
-        // Zero opacity should be preserved
         assert_eq!(tree.get("opacity").unwrap().as_f64(), Some(0.0));
     }
 
@@ -98,7 +96,6 @@ mod tests {
 
             remove_default_opacity(&mut tree).unwrap();
 
-            // All non-1.0 opacities should be preserved
             assert_eq!(tree.get("opacity").unwrap().as_f64(), Some(opacity_value));
         }
     }
@@ -113,7 +110,6 @@ mod tests {
 
         remove_default_opacity(&mut tree).unwrap();
 
-        // Tree without opacity should be unchanged
         assert_eq!(tree.get("name").unwrap().as_str(), Some("Rectangle"));
         assert_eq!(tree.get("width").unwrap().as_i64(), Some(100));
         assert!(tree.get("opacity").is_none());
@@ -136,7 +132,6 @@ mod tests {
 
         remove_default_opacity(&mut tree).unwrap();
 
-        // opacity 1.0 removed, 0.7 preserved
         assert!(tree["children"][0].get("opacity").is_none());
         assert_eq!(tree["children"][0]["name"].as_str(), Some("Child1"));
 
@@ -163,11 +158,9 @@ mod tests {
 
         remove_default_opacity(&mut tree).unwrap();
 
-        // opacity 1.0 removed from first paint
         assert!(tree["fillPaints"][0].get("opacity").is_none());
         assert_eq!(tree["fillPaints"][0]["type"].as_str(), Some("SOLID"));
 
-        // opacity 0.8 preserved in second paint
         assert_eq!(tree["fillPaints"][1]["opacity"].as_f64(), Some(0.8));
         assert_eq!(tree["fillPaints"][1]["type"].as_str(), Some("GRADIENT"));
     }
@@ -193,7 +186,6 @@ mod tests {
 
         remove_default_opacity(&mut tree).unwrap();
 
-        // All opacity 1.0 should be removed at all levels
         let frame = &tree["document"]["children"][0];
         assert!(frame.get("opacity").is_none());
         assert!(frame["fillPaints"][0].get("opacity").is_none());
@@ -212,7 +204,6 @@ mod tests {
 
         remove_default_opacity(&mut tree).unwrap();
 
-        // All opacity 1.0 should be removed
         assert!(tree["children"][0].get("opacity").is_none());
         assert!(tree["children"][1].get("opacity").is_none());
         assert!(tree["children"][2].get("opacity").is_none());
@@ -230,7 +221,6 @@ mod tests {
 
         remove_default_opacity(&mut tree).unwrap();
 
-        // Integer 1 should also be removed (since 1 == 1.0)
         assert!(tree.get("opacity").is_none());
     }
 
@@ -243,7 +233,6 @@ mod tests {
 
         remove_default_opacity(&mut tree).unwrap();
 
-        // String opacity should not be touched
         assert_eq!(tree.get("opacity").unwrap().as_str(), Some("1.0"));
     }
 }

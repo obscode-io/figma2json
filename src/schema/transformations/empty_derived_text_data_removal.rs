@@ -73,7 +73,6 @@ mod tests {
 
         remove_empty_derived_text_data(&mut tree).unwrap();
 
-        // Non-empty derivedTextData should be preserved
         assert!(tree.get("derivedTextData").is_some());
         let derived = tree.get("derivedTextData").unwrap();
         assert_eq!(derived.get("fontFamily").unwrap().as_str(), Some("Arial"));
@@ -91,7 +90,6 @@ mod tests {
 
         remove_empty_derived_text_data(&mut tree).unwrap();
 
-        // derivedTextData with even one field should be preserved
         assert!(tree.get("derivedTextData").is_some());
         assert_eq!(
             tree["derivedTextData"]["characters"].as_str(),
@@ -109,7 +107,6 @@ mod tests {
 
         remove_empty_derived_text_data(&mut tree).unwrap();
 
-        // Tree without derivedTextData should be unchanged
         assert_eq!(tree.get("name").unwrap().as_str(), Some("Rectangle"));
         assert_eq!(tree.get("width").unwrap().as_i64(), Some(100));
         assert!(tree.get("derivedTextData").is_none());
@@ -134,11 +131,9 @@ mod tests {
 
         remove_empty_derived_text_data(&mut tree).unwrap();
 
-        // Empty derivedTextData removed
         assert!(tree["children"][0].get("derivedTextData").is_none());
         assert_eq!(tree["children"][0]["name"].as_str(), Some("Text1"));
 
-        // Non-empty derivedTextData preserved
         assert!(tree["children"][1].get("derivedTextData").is_some());
         assert_eq!(
             tree["children"][1]["derivedTextData"]["info"].as_str(),
@@ -180,7 +175,6 @@ mod tests {
 
         remove_empty_derived_text_data(&mut tree).unwrap();
 
-        // All empty derivedTextData should be removed
         assert!(tree["children"][0].get("derivedTextData").is_none());
         assert!(tree["children"][1].get("derivedTextData").is_none());
         assert!(tree["children"][2].get("derivedTextData").is_none());
@@ -219,7 +213,6 @@ mod tests {
 
         remove_empty_derived_text_data(&mut tree).unwrap();
 
-        // Non-object derivedTextData should be preserved
         assert_eq!(
             tree.get("derivedTextData").unwrap().as_str(),
             Some("not an object")
@@ -237,7 +230,6 @@ mod tests {
 
         remove_empty_derived_text_data(&mut tree).unwrap();
 
-        // Only derivedTextData should be removed
         assert!(tree.get("derivedTextData").is_none());
         assert!(tree.get("otherEmptyObject").is_some());
         assert!(tree.get("metadata").is_some());

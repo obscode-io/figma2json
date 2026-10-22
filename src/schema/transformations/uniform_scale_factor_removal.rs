@@ -70,7 +70,6 @@ mod tests {
 
         remove_default_uniform_scale_factor(&mut tree).unwrap();
 
-        // Non-default scale factors should be preserved
         assert_eq!(tree.get("uniformScaleFactor").unwrap().as_f64(), Some(2.5));
         assert_eq!(tree.get("name").unwrap().as_str(), Some("Shape"));
     }
@@ -86,7 +85,6 @@ mod tests {
 
             remove_default_uniform_scale_factor(&mut tree).unwrap();
 
-            // All non-default scale factors should be preserved
             assert_eq!(
                 tree.get("uniformScaleFactor").unwrap().as_f64(),
                 Some(factor)
@@ -104,7 +102,6 @@ mod tests {
 
         remove_default_uniform_scale_factor(&mut tree).unwrap();
 
-        // Tree without uniformScaleFactor should be unchanged
         assert_eq!(tree.get("name").unwrap().as_str(), Some("Rectangle"));
         assert_eq!(tree.get("width").unwrap().as_i64(), Some(100));
         assert!(tree.get("uniformScaleFactor").is_none());
@@ -127,7 +124,6 @@ mod tests {
 
         remove_default_uniform_scale_factor(&mut tree).unwrap();
 
-        // Default (1.0) removed, 2.0 preserved
         assert!(tree["children"][0].get("uniformScaleFactor").is_none());
         assert_eq!(tree["children"][0]["name"].as_str(), Some("Child1"));
 
@@ -159,7 +155,6 @@ mod tests {
 
         remove_default_uniform_scale_factor(&mut tree).unwrap();
 
-        // All default scale factors should be removed at all levels
         let frame = &tree["document"]["children"][0];
         assert!(frame.get("uniformScaleFactor").is_none());
         assert!(frame["layers"][0].get("uniformScaleFactor").is_none());
@@ -178,7 +173,6 @@ mod tests {
 
         remove_default_uniform_scale_factor(&mut tree).unwrap();
 
-        // All default scale factors should be removed
         assert!(tree["children"][0].get("uniformScaleFactor").is_none());
         assert!(tree["children"][1].get("uniformScaleFactor").is_none());
         assert!(tree["children"][2].get("uniformScaleFactor").is_none());
@@ -195,20 +189,17 @@ mod tests {
 
         remove_default_uniform_scale_factor(&mut tree).unwrap();
 
-        // Zero is not the default, so it should be preserved
         assert_eq!(tree.get("uniformScaleFactor").unwrap().as_f64(), Some(0.0));
     }
 
     #[test]
     fn test_integer_one_vs_float_one() {
-        // JSON doesn't distinguish between 1 and 1.0, both are treated as numbers
         let mut tree = json!({
             "uniformScaleFactor": 1
         });
 
         remove_default_uniform_scale_factor(&mut tree).unwrap();
 
-        // Integer 1 should also be removed (it's the same as 1.0)
         assert!(tree.get("uniformScaleFactor").is_none());
     }
 }

@@ -63,7 +63,6 @@ mod tests {
             derived_text_data.get("otherInfo").unwrap().as_str(),
             Some("test")
         );
-        // size field should be preserved
         assert!(tree.get("size").is_some());
     }
 
@@ -105,7 +104,6 @@ mod tests {
         remove_derived_text_layout_size(&mut tree).unwrap();
 
         let derived_text_data = tree.get("derivedTextData").unwrap();
-        // derivedTextData without layoutSize should be unchanged
         assert!(derived_text_data.get("layoutSize").is_none());
         assert_eq!(
             derived_text_data.get("fontFamily").unwrap().as_str(),
@@ -123,7 +121,6 @@ mod tests {
 
         remove_derived_text_layout_size(&mut tree).unwrap();
 
-        // Tree without derivedTextData should be unchanged
         assert_eq!(tree.get("name").unwrap().as_str(), Some("Rectangle"));
         assert_eq!(tree.get("width").unwrap().as_i64(), Some(100));
         assert!(tree.get("derivedTextData").is_none());
@@ -152,7 +149,6 @@ mod tests {
 
         remove_derived_text_layout_size(&mut tree).unwrap();
 
-        // Both layoutSize fields should be removed
         assert!(tree["children"][0]["derivedTextData"]
             .get("layoutSize")
             .is_none());
@@ -203,7 +199,6 @@ mod tests {
         remove_derived_text_layout_size(&mut tree).unwrap();
 
         let derived_text_data = tree.get("derivedTextData").unwrap();
-        // Empty derivedTextData should remain empty
         assert!(derived_text_data.as_object().unwrap().is_empty());
     }
 
@@ -219,11 +214,9 @@ mod tests {
 
         remove_derived_text_layout_size(&mut tree).unwrap();
 
-        // layoutSize outside derivedTextData should be preserved
         assert!(tree.get("layoutSize").is_some());
         assert_eq!(tree["layoutSize"]["x"].as_f64(), Some(100.0));
 
-        // layoutSize inside derivedTextData should be removed
         assert!(tree["derivedTextData"].get("layoutSize").is_none());
     }
 }

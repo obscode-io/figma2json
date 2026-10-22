@@ -86,7 +86,6 @@ pub fn remove_default_text_line_properties(tree: &mut JsonValue) -> Result<()> {
                 remove_default_line_fields(line_obj);
             }
         }
-        // Only remove the lines array if it has elements and all of them are now empty
         let all_empty = !lines.is_empty()
             && lines
                 .iter()
@@ -135,7 +134,6 @@ mod tests {
 
         remove_default_text_line_properties(&mut tree).unwrap();
 
-        // Entire lines array should be removed
         assert!(tree["textData"].get("lines").is_none());
         assert_eq!(tree["textData"]["characters"].as_str(), Some("Hello"));
     }
@@ -160,12 +158,10 @@ mod tests {
 
         remove_default_text_line_properties(&mut tree).unwrap();
 
-        // Lines array should still exist because indentationLevel is non-default
         assert!(tree["textData"].get("lines").is_some());
         let lines = tree["textData"]["lines"].as_array().unwrap();
         assert_eq!(lines.len(), 1);
         assert_eq!(lines[0]["indentationLevel"].as_i64(), Some(2));
-        // All other defaults should be removed
         assert!(lines[0].get("isFirstLineOfList").is_none());
         assert!(lines[0].get("lineType").is_none());
         assert!(lines[0].get("listStartOffset").is_none());
@@ -193,13 +189,11 @@ mod tests {
 
         remove_default_text_line_properties(&mut tree).unwrap();
 
-        // Lines array should still exist
         let lines = tree["textData"]["lines"].as_array().unwrap();
         assert_eq!(lines.len(), 1);
         assert_eq!(lines[0]["indentationLevel"].as_i64(), Some(1));
         assert_eq!(lines[0]["isFirstLineOfList"].as_bool(), Some(true));
         assert_eq!(lines[0]["lineType"].as_str(), Some("UNORDERED_LIST"));
-        // Defaults should be removed
         assert!(lines[0].get("listStartOffset").is_none());
         assert!(lines[0].get("sourceDirectionality").is_none());
         assert!(lines[0].get("styleId").is_none());
@@ -225,11 +219,9 @@ mod tests {
 
         remove_default_text_line_properties(&mut tree).unwrap();
 
-        // Lines array should still exist because styleId is non-default
         let lines = tree["textData"]["lines"].as_array().unwrap();
         assert_eq!(lines.len(), 1);
         assert_eq!(lines[0]["styleId"].as_i64(), Some(5));
-        // All other defaults should be removed
         assert!(lines[0].get("indentationLevel").is_none());
         assert!(lines[0].get("isFirstLineOfList").is_none());
         assert!(lines[0].get("lineType").is_none());
@@ -265,12 +257,9 @@ mod tests {
 
         remove_default_text_line_properties(&mut tree).unwrap();
 
-        // Lines array should still exist because second line has non-default indentation
         let lines = tree["textData"]["lines"].as_array().unwrap();
         assert_eq!(lines.len(), 2);
-        // First line should be empty (all defaults)
         assert!(lines[0].as_object().unwrap().is_empty());
-        // Second line should have only indentationLevel
         assert_eq!(lines[1]["indentationLevel"].as_i64(), Some(1));
         assert!(lines[1].get("isFirstLineOfList").is_none());
     }
@@ -314,10 +303,8 @@ mod tests {
 
         remove_default_text_line_properties(&mut tree).unwrap();
 
-        // First child should have lines array removed (all defaults)
         assert!(tree["children"][0]["textData"].get("lines").is_none());
 
-        // Second child should still have lines array (indentation is non-default)
         assert!(tree["children"][1]["textData"].get("lines").is_some());
         let lines = tree["children"][1]["textData"]["lines"].as_array().unwrap();
         assert_eq!(lines[0]["indentationLevel"].as_i64(), Some(1));
@@ -343,7 +330,6 @@ mod tests {
 
         remove_default_text_line_properties(&mut tree).unwrap();
 
-        // Works for textValue.lines as well
         assert!(tree["textValue"].get("lines").is_none());
     }
 
@@ -357,7 +343,6 @@ mod tests {
 
         remove_default_text_line_properties(&mut tree).unwrap();
 
-        // Tree without lines should be unchanged
         assert_eq!(tree["textData"]["characters"].as_str(), Some("Hello"));
     }
 
@@ -381,10 +366,8 @@ mod tests {
 
         remove_default_text_line_properties(&mut tree).unwrap();
 
-        // Lines array should still exist
         let lines = tree["textData"]["lines"].as_array().unwrap();
         assert_eq!(lines[0]["listStartOffset"].as_i64(), Some(5));
-        // Other defaults removed
         assert!(lines[0].get("indentationLevel").is_none());
         assert!(lines[0].get("isFirstLineOfList").is_none());
         assert!(lines[0].get("lineType").is_none());
@@ -435,7 +418,6 @@ mod tests {
 
         remove_default_text_line_properties(&mut tree).unwrap();
 
-        // Empty lines array should be preserved (not our concern)
         assert!(tree["textData"].get("lines").is_some());
         assert_eq!(tree["textData"]["lines"].as_array().unwrap().len(), 0);
     }
@@ -476,7 +458,6 @@ mod tests {
 
         remove_default_text_line_properties(&mut tree).unwrap();
 
-        // All lines are defaults, so entire lines array should be removed
         assert!(tree["textData"].get("lines").is_none());
     }
 }
