@@ -35,42 +35,27 @@ pub fn remove_empty_objects(tree: &mut JsonValue) -> Result<()> {
     Ok(())
 }
 
-/// Recursively remove empty objects from a JSON value
+/// Recursively remove empty objects from a JSON value, children first.
+///
+/// This does not use the shared object walker because empty objects must
+/// also be filtered out of arrays, not just object values.
 fn transform_recursive(value: &mut JsonValue) {
     match value {
         JsonValue::Object(map) => {
-            // First, recurse into all values
-            let keys: Vec<String> = map.keys().cloned().collect();
-            for key in &keys {
-                if let Some(val) = map.get_mut(key) {
-                    transform_recursive(val);
-                }
-            }
-
-            // Then remove any keys whose values are empty objects
+            map.values_mut().for_each(transform_recursive);
             map.retain(|_, v| !is_empty_object(v));
         }
         JsonValue::Array(arr) => {
-            // First, recurse into array elements
-            for val in arr.iter_mut() {
-                transform_recursive(val);
-            }
-
-            // Then filter out empty objects from the array
+            arr.iter_mut().for_each(transform_recursive);
             arr.retain(|v| !is_empty_object(v));
         }
-        _ => {
-            // Primitives - nothing to do
-        }
+        _ => {}
     }
 }
 
 /// Check if a JSON value is an empty object {}
 fn is_empty_object(value: &JsonValue) -> bool {
-    match value {
-        JsonValue::Object(map) => map.is_empty(),
-        _ => false,
-    }
+    matches!(value, JsonValue::Object(map) if map.is_empty())
 }
 
 #[cfg(test)]

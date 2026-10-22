@@ -1,3 +1,4 @@
+use super::walk::for_each_object_mut;
 use crate::error::Result;
 use serde_json::Value as JsonValue;
 
@@ -30,50 +31,13 @@ use serde_json::Value as JsonValue;
 /// // fontName now has only "family" and "style" fields
 /// ```
 pub fn remove_empty_font_postscript(tree: &mut JsonValue) -> Result<()> {
-    transform_recursive(tree)
-}
-
-/// Recursively remove empty postscript fields from fontName objects
-fn transform_recursive(value: &mut JsonValue) -> Result<()> {
-    match value {
-        JsonValue::Object(map) => {
-            // Check if this object has a "fontName" field
-            let keys: Vec<String> = map.keys().cloned().collect();
-
-            for key in keys {
-                if key == "fontName" {
-                    // This might be a fontName object with postscript field
-                    if let Some(font_name) = map.get_mut(&key) {
-                        if let Some(font_obj) = font_name.as_object_mut() {
-                            // Check if postscript exists and is empty
-                            if let Some(postscript) = font_obj.get("postscript") {
-                                if let Some(s) = postscript.as_str() {
-                                    if s.is_empty() {
-                                        font_obj.remove("postscript");
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Recurse into the value regardless
-                if let Some(val) = map.get_mut(&key) {
-                    transform_recursive(val)?;
-                }
+    for_each_object_mut(tree, &mut |map| {
+        if let Some(JsonValue::Object(font)) = map.get_mut("fontName") {
+            if font.get("postscript").and_then(JsonValue::as_str) == Some("") {
+                font.remove("postscript");
             }
         }
-        JsonValue::Array(arr) => {
-            // Recurse into array elements
-            for val in arr.iter_mut() {
-                transform_recursive(val)?;
-            }
-        }
-        _ => {
-            // Primitives - nothing to do
-        }
-    }
-
+    });
     Ok(())
 }
 

@@ -1,3 +1,4 @@
+use super::walk::for_each_object_mut;
 use crate::error::Result;
 use serde_json::Value as JsonValue;
 
@@ -30,42 +31,14 @@ use serde_json::Value as JsonValue;
 /// // image now has only "scale" field
 /// ```
 pub fn remove_default_rotation(tree: &mut JsonValue) -> Result<()> {
-    transform_recursive(tree)
-}
-
-/// Recursively remove default rotation fields from a JSON value
-fn transform_recursive(value: &mut JsonValue) -> Result<()> {
-    match value {
-        JsonValue::Object(map) => {
-            // Check if rotation exists and is 0.0
-            if let Some(rotation) = map.get("rotation") {
-                if let Some(n) = rotation.as_f64() {
-                    // Use epsilon comparison for floating point
-                    if n.abs() < f64::EPSILON {
-                        map.remove("rotation");
-                    }
-                }
-            }
-
-            // Recurse into all remaining values
-            let keys: Vec<String> = map.keys().cloned().collect();
-            for key in keys {
-                if let Some(val) = map.get_mut(&key) {
-                    transform_recursive(val)?;
-                }
-            }
+    for_each_object_mut(tree, &mut |map| {
+        if map
+            .get("rotation")
+            .is_some_and(|v| v.as_f64().is_some_and(|n| n.abs() < f64::EPSILON))
+        {
+            map.remove("rotation");
         }
-        JsonValue::Array(arr) => {
-            // Recurse into array elements
-            for val in arr.iter_mut() {
-                transform_recursive(val)?;
-            }
-        }
-        _ => {
-            // Primitives - nothing to do
-        }
-    }
-
+    });
     Ok(())
 }
 

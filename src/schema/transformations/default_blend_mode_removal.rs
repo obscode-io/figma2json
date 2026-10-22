@@ -1,3 +1,4 @@
+use super::walk::for_each_object_mut;
 use crate::error::Result;
 use serde_json::Value as JsonValue;
 
@@ -31,41 +32,14 @@ use serde_json::Value as JsonValue;
 /// // tree now has only "name" and "opacity" fields
 /// ```
 pub fn remove_default_blend_mode(tree: &mut JsonValue) -> Result<()> {
-    transform_recursive(tree)
-}
-
-/// Recursively remove default blendMode fields from a JSON value
-fn transform_recursive(value: &mut JsonValue) -> Result<()> {
-    match value {
-        JsonValue::Object(map) => {
-            // Check if blendMode exists and is "NORMAL"
-            if let Some(blend_mode) = map.get("blendMode") {
-                if let Some(s) = blend_mode.as_str() {
-                    if s == "NORMAL" {
-                        map.remove("blendMode");
-                    }
-                }
-            }
-
-            // Recurse into all remaining values
-            let keys: Vec<String> = map.keys().cloned().collect();
-            for key in keys {
-                if let Some(val) = map.get_mut(&key) {
-                    transform_recursive(val)?;
-                }
-            }
+    for_each_object_mut(tree, &mut |map| {
+        if map
+            .get("blendMode")
+            .is_some_and(|v| v.as_str() == Some("NORMAL"))
+        {
+            map.remove("blendMode");
         }
-        JsonValue::Array(arr) => {
-            // Recurse into array elements
-            for val in arr.iter_mut() {
-                transform_recursive(val)?;
-            }
-        }
-        _ => {
-            // Primitives - nothing to do
-        }
-    }
-
+    });
     Ok(())
 }
 

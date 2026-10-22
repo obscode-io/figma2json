@@ -1,3 +1,4 @@
+use super::walk::for_each_object_mut;
 use crate::error::Result;
 use serde_json::Value as JsonValue;
 
@@ -29,41 +30,14 @@ use serde_json::Value as JsonValue;
 /// // tree now has only "name" and "fontSize" fields
 /// ```
 pub fn remove_empty_derived_text_data(tree: &mut JsonValue) -> Result<()> {
-    transform_recursive(tree)
-}
-
-/// Recursively remove empty derivedTextData fields from a JSON value
-fn transform_recursive(value: &mut JsonValue) -> Result<()> {
-    match value {
-        JsonValue::Object(map) => {
-            // Check if derivedTextData exists and is an empty object
-            if let Some(derived_text_data) = map.get("derivedTextData") {
-                if let Some(obj) = derived_text_data.as_object() {
-                    if obj.is_empty() {
-                        map.remove("derivedTextData");
-                    }
-                }
-            }
-
-            // Recurse into all remaining values
-            let keys: Vec<String> = map.keys().cloned().collect();
-            for key in keys {
-                if let Some(val) = map.get_mut(&key) {
-                    transform_recursive(val)?;
-                }
-            }
+    for_each_object_mut(tree, &mut |map| {
+        if map
+            .get("derivedTextData")
+            .is_some_and(|v| v.as_object().is_some_and(|obj| obj.is_empty()))
+        {
+            map.remove("derivedTextData");
         }
-        JsonValue::Array(arr) => {
-            // Recurse into array elements
-            for val in arr.iter_mut() {
-                transform_recursive(val)?;
-            }
-        }
-        _ => {
-            // Primitives - nothing to do
-        }
-    }
-
+    });
     Ok(())
 }
 

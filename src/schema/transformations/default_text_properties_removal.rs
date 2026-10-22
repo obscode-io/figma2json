@@ -1,3 +1,4 @@
+use super::walk::for_each_object_mut;
 use crate::error::Result;
 use serde_json::Value as JsonValue;
 
@@ -32,46 +33,17 @@ use serde_json::Value as JsonValue;
 /// // tree now has only "name" and "fontSize" fields
 /// ```
 pub fn remove_default_text_properties(tree: &mut JsonValue) -> Result<()> {
-    transform_recursive(tree)
-}
-
-/// Recursively remove default text properties from a JSON value
-fn transform_recursive(value: &mut JsonValue) -> Result<()> {
-    match value {
-        JsonValue::Object(map) => {
-            // Check and remove letterSpacing if it's default (0 PERCENT)
-            if let Some(letter_spacing) = map.get("letterSpacing") {
-                if is_default_letter_spacing(letter_spacing) {
-                    map.remove("letterSpacing");
-                }
-            }
-
-            // Check and remove lineHeight if it's default (100 PERCENT)
-            if let Some(line_height) = map.get("lineHeight") {
-                if is_default_line_height(line_height) {
-                    map.remove("lineHeight");
-                }
-            }
-
-            // Recurse into all remaining values
-            let keys: Vec<String> = map.keys().cloned().collect();
-            for key in keys {
-                if let Some(val) = map.get_mut(&key) {
-                    transform_recursive(val)?;
-                }
-            }
+    for_each_object_mut(tree, &mut |map| {
+        if map
+            .get("letterSpacing")
+            .is_some_and(is_default_letter_spacing)
+        {
+            map.remove("letterSpacing");
         }
-        JsonValue::Array(arr) => {
-            // Recurse into array elements
-            for val in arr.iter_mut() {
-                transform_recursive(val)?;
-            }
+        if map.get("lineHeight").is_some_and(is_default_line_height) {
+            map.remove("lineHeight");
         }
-        _ => {
-            // Primitives - nothing to do
-        }
-    }
-
+    });
     Ok(())
 }
 

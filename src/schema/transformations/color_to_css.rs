@@ -1,3 +1,4 @@
+use super::walk::for_each_object_mut;
 use crate::error::Result;
 use serde_json::Value as JsonValue;
 
@@ -33,47 +34,19 @@ use serde_json::Value as JsonValue;
 /// // tree now has "color": "#df1010"
 /// ```
 pub fn transform_colors_to_css(tree: &mut JsonValue) -> Result<()> {
-    transform_recursive(tree)
-}
-
-/// Recursively transform color objects in a JSON value
-fn transform_recursive(value: &mut JsonValue) -> Result<()> {
-    match value {
-        JsonValue::Object(map) => {
-            // Collect keys to avoid borrow checker issues
-            let keys: Vec<String> = map.keys().cloned().collect();
-
-            for key in keys {
-                if let Some(val) = map.get(&key) {
-                    // Check if this value is a color object
-                    if let Some(obj) = val.as_object() {
-                        if is_color_object(obj) {
-                            // Convert color object to CSS hex string
-                            if let Some(css_color) = convert_color_to_css(obj) {
-                                map.insert(key.clone(), JsonValue::String(css_color));
-                                continue; // Skip recursion since we replaced the object
-                            }
-                        }
-                    }
-                }
-
-                // Recurse into the value if it wasn't replaced
-                if let Some(val) = map.get_mut(&key) {
-                    transform_recursive(val)?;
-                }
+    // Color objects are replaced by strings before the walk reaches them,
+    // so their r/g/b/a fields are never visited.
+    for_each_object_mut(tree, &mut |map| {
+        for value in map.values_mut() {
+            let css = value
+                .as_object()
+                .filter(|obj| is_color_object(obj))
+                .and_then(convert_color_to_css);
+            if let Some(css) = css {
+                *value = JsonValue::String(css);
             }
         }
-        JsonValue::Array(arr) => {
-            // Recurse into array elements
-            for val in arr.iter_mut() {
-                transform_recursive(val)?;
-            }
-        }
-        _ => {
-            // Primitives - nothing to do
-        }
-    }
-
+    });
     Ok(())
 }
 
@@ -417,5 +390,16 @@ mod tests {
             tree["document"]["children"][0]["fills"][0]["color"].as_str(),
             Some("#808080")
         );
+    }
+
+    #[test]
+    fn test_only_object_values_are_converted() {
+        // Colors are only converted when they are the value of an object key;
+        // the root and bare array elements are left as objects.
+        let color = json!({"r": 1.0, "g": 0.0, "b": 0.0});
+        let mut tree = json!({"r": 1.0, "g": 0.0, "b": 0.0, "list": [color.clone()]});
+        transform_colors_to_css(&mut tree).unwrap();
+        assert_eq!(tree["r"], json!(1.0));
+        assert_eq!(tree["list"][0], color);
     }
 }

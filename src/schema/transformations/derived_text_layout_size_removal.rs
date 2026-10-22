@@ -1,3 +1,4 @@
+use super::walk::for_each_object_mut;
 use crate::error::Result;
 use serde_json::Value as JsonValue;
 
@@ -30,44 +31,11 @@ use serde_json::Value as JsonValue;
 /// // derivedTextData now has only "otherInfo"
 /// ```
 pub fn remove_derived_text_layout_size(tree: &mut JsonValue) -> Result<()> {
-    transform_recursive(tree)
-}
-
-/// Recursively remove layoutSize from derivedTextData objects
-fn transform_recursive(value: &mut JsonValue) -> Result<()> {
-    match value {
-        JsonValue::Object(map) => {
-            // Check if this object has a "derivedTextData" field
-            let keys: Vec<String> = map.keys().cloned().collect();
-
-            for key in keys {
-                if key == "derivedTextData" {
-                    // This might be a derivedTextData object with layoutSize
-                    if let Some(derived_text_data) = map.get_mut(&key) {
-                        if let Some(data_obj) = derived_text_data.as_object_mut() {
-                            // Remove the layoutSize field
-                            data_obj.remove("layoutSize");
-                        }
-                    }
-                }
-
-                // Recurse into the value regardless
-                if let Some(val) = map.get_mut(&key) {
-                    transform_recursive(val)?;
-                }
-            }
+    for_each_object_mut(tree, &mut |map| {
+        if let Some(JsonValue::Object(data)) = map.get_mut("derivedTextData") {
+            data.remove("layoutSize");
         }
-        JsonValue::Array(arr) => {
-            // Recurse into array elements
-            for val in arr.iter_mut() {
-                transform_recursive(val)?;
-            }
-        }
-        _ => {
-            // Primitives - nothing to do
-        }
-    }
-
+    });
     Ok(())
 }
 
