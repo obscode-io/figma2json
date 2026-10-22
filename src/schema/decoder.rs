@@ -29,7 +29,7 @@ use serde_json::Value as JsonValue;
 pub fn decode_fig_to_json(schema_bytes: &[u8], data_bytes: &[u8]) -> Result<JsonValue> {
     // 1. Decode the binary schema
     let schema = Schema::decode(schema_bytes)
-        .map_err(|_| FigError::ZipError("Failed to decode Kiwi binary schema".to_string()))?;
+        .map_err(|_| FigError::Decode("Failed to decode Kiwi binary schema".to_string()))?;
 
     // 2. Find the root message type
     // In Figma .fig files, the root message is named "Message" and contains nodeChanges and blobs
@@ -43,7 +43,7 @@ pub fn decode_fig_to_json(schema_bytes: &[u8], data_bytes: &[u8]) -> Result<Json
         })
         .map(|def| def.index)
         .ok_or_else(|| {
-            FigError::ZipError("No root Message definition found in schema".to_string())
+            FigError::Decode("No root Message definition found in schema".to_string())
         })?;
 
     // 3. Decode the message data straight into JSON.
@@ -55,7 +55,7 @@ pub fn decode_fig_to_json(schema_bytes: &[u8], data_bytes: &[u8]) -> Result<Json
     // base64 string here, which is what `blobs::process_blobs` produced anyway.
     let mut bb = ByteBuffer::new(data_bytes);
     decode_type(&schema, root_type_id, &mut bb)
-        .map_err(|_| FigError::ZipError("Failed to decode message data".to_string()))
+        .map_err(|_| FigError::Decode("Failed to decode message data".to_string()))
 }
 
 fn float_to_json(f: f32) -> JsonValue {

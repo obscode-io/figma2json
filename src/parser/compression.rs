@@ -91,7 +91,7 @@ pub fn decompress_chunk(bytes: &[u8]) -> Result<Vec<u8>> {
             // DEFLATE failed, try Zstandard
             match decompress_zstd(bytes) {
                 Ok(data) => Ok(data),
-                Err(e) => Err(FigError::ZipError(format!(
+                Err(e) => Err(FigError::Decompression(format!(
                     "Failed to decompress chunk (tried both DEFLATE and Zstandard): {}",
                     e
                 ))),
@@ -106,14 +106,14 @@ fn decompress_deflate(bytes: &[u8]) -> Result<Vec<u8>> {
     let mut decompressed = Vec::new();
     decoder
         .read_to_end(&mut decompressed)
-        .map_err(|e| FigError::ZipError(format!("DEFLATE decompression failed: {}", e)))?;
+        .map_err(|e| FigError::Decompression(format!("DEFLATE decompression failed: {}", e)))?;
     Ok(decompressed)
 }
 
 /// Decompress data using Zstandard
 fn decompress_zstd(bytes: &[u8]) -> Result<Vec<u8>> {
     zstd::decode_all(bytes)
-        .map_err(|e| FigError::ZipError(format!("Zstandard decompression failed: {}", e)))
+        .map_err(|e| FigError::Decompression(format!("Zstandard decompression failed: {}", e)))
 }
 
 #[cfg(test)]

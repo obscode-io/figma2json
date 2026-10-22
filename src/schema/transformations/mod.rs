@@ -113,6 +113,7 @@ pub mod type_removal;
 pub mod uniform_scale_factor_removal;
 pub mod user_facing_version_removal;
 pub mod visible_only_objects_removal;
+mod walk;
 
 // Re-export commonly used functions
 pub use background_properties_removal::remove_background_properties;

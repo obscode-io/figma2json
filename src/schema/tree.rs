@@ -67,7 +67,7 @@ fn build_node_tree(
     // Get the node
     let mut node = nodes
         .remove(guid)
-        .ok_or_else(|| FigError::ZipError(format!("Node {} not found", guid)))?;
+        .ok_or_else(|| FigError::InvalidDocument(format!("Node {} not found", guid)))?;
 
     // Remove parentIndex
     if let Some(obj) = node.as_object_mut() {
@@ -97,17 +97,17 @@ fn format_guid(node: &JsonValue) -> Result<String> {
     let guid_obj = node
         .get("guid")
         .and_then(|v| v.as_object())
-        .ok_or_else(|| FigError::ZipError("Node missing guid field".to_string()))?;
+        .ok_or_else(|| FigError::InvalidDocument("Node missing guid field".to_string()))?;
 
     let session_id = guid_obj
         .get("sessionID")
         .and_then(|v| v.as_u64())
-        .ok_or_else(|| FigError::ZipError("Invalid sessionID in guid".to_string()))?;
+        .ok_or_else(|| FigError::InvalidDocument("Invalid sessionID in guid".to_string()))?;
 
     let local_id = guid_obj
         .get("localID")
         .and_then(|v| v.as_u64())
-        .ok_or_else(|| FigError::ZipError("Invalid localID in guid".to_string()))?;
+        .ok_or_else(|| FigError::InvalidDocument("Invalid localID in guid".to_string()))?;
 
     Ok(format!("{}:{}", session_id, local_id))
 }
@@ -117,17 +117,17 @@ fn format_parent_guid(parent_index: &JsonValue) -> Result<String> {
     let guid_obj = parent_index
         .get("guid")
         .and_then(|v| v.as_object())
-        .ok_or_else(|| FigError::ZipError("parentIndex missing guid field".to_string()))?;
+        .ok_or_else(|| FigError::InvalidDocument("parentIndex missing guid field".to_string()))?;
 
     let session_id = guid_obj
         .get("sessionID")
         .and_then(|v| v.as_u64())
-        .ok_or_else(|| FigError::ZipError("Invalid sessionID in parentIndex".to_string()))?;
+        .ok_or_else(|| FigError::InvalidDocument("Invalid sessionID in parentIndex".to_string()))?;
 
     let local_id = guid_obj
         .get("localID")
         .and_then(|v| v.as_u64())
-        .ok_or_else(|| FigError::ZipError("Invalid localID in parentIndex".to_string()))?;
+        .ok_or_else(|| FigError::InvalidDocument("Invalid localID in parentIndex".to_string()))?;
 
     Ok(format!("{}:{}", session_id, local_id))
 }

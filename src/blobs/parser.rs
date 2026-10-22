@@ -1,4 +1,5 @@
-use crate::error::Result;
+use crate::error::{FigError, Result};
+use base64::{engine::general_purpose, Engine as _};
 use serde_json::Value as JsonValue;
 
 /// Parse a blob based on its type
@@ -34,14 +35,13 @@ pub fn parse_blob(blob_type: &str, blob: &JsonValue) -> Result<Option<JsonValue>
 fn extract_blob_bytes(blob: &JsonValue) -> Result<Vec<u8>> {
     let bytes_value = blob
         .get("bytes")
-        .ok_or_else(|| crate::error::FigError::ZipError("Blob missing bytes field".to_string()))?;
+        .ok_or_else(|| FigError::InvalidBlob("Blob missing bytes field".to_string()))?;
 
     // Handle base64 string
     if let Some(base64_str) = bytes_value.as_str() {
-        use base64::{engine::general_purpose, Engine as _};
-        return general_purpose::STANDARD.decode(base64_str).map_err(|e| {
-            crate::error::FigError::ZipError(format!("Failed to decode base64: {}", e))
-        });
+        return general_purpose::STANDARD
+            .decode(base64_str)
+            .map_err(|e| FigError::InvalidBlob(format!("Failed to decode base64: {}", e)));
     }
 
     // Handle array of numbers
@@ -53,7 +53,7 @@ fn extract_blob_bytes(blob: &JsonValue) -> Result<Vec<u8>> {
         return Ok(bytes);
     }
 
-    Err(crate::error::FigError::ZipError(
+    Err(FigError::InvalidBlob(
         "Blob bytes field is neither string nor array".to_string(),
     ))
 }

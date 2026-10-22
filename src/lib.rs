@@ -185,7 +185,9 @@ pub fn convert_with_options(
         .get_mut("nodeChanges")
         .and_then(|v| v.as_array_mut())
         .map(std::mem::take)
-        .ok_or_else(|| FigError::ZipError("No nodeChanges found in decoded data".to_string()))?;
+        .ok_or_else(|| {
+            FigError::InvalidDocument("No nodeChanges found in decoded data".to_string())
+        })?;
 
     let mut document = schema::build_tree(node_changes)?;
 
@@ -206,7 +208,7 @@ pub fn convert_with_options(
         .get_mut("blobs")
         .and_then(|v| v.as_array_mut())
         .map(std::mem::take)
-        .ok_or_else(|| FigError::ZipError("No blobs found in decoded data".to_string()))?;
+        .ok_or_else(|| FigError::InvalidDocument("No blobs found in decoded data".to_string()))?;
     drop(json);
 
     let processed_blobs = blobs::process_blobs(blobs)?;
@@ -503,7 +505,9 @@ pub fn convert_raw(bytes: &[u8]) -> Result<serde_json::Value> {
         .get_mut("nodeChanges")
         .and_then(|v| v.as_array_mut())
         .map(std::mem::take)
-        .ok_or_else(|| FigError::ZipError("No nodeChanges found in decoded data".to_string()))?;
+        .ok_or_else(|| {
+            FigError::InvalidDocument("No nodeChanges found in decoded data".to_string())
+        })?;
 
     let mut document = schema::build_tree(node_changes)?;
 
@@ -512,7 +516,7 @@ pub fn convert_raw(bytes: &[u8]) -> Result<serde_json::Value> {
         .get_mut("blobs")
         .and_then(|v| v.as_array_mut())
         .map(std::mem::take)
-        .ok_or_else(|| FigError::ZipError("No blobs found in decoded data".to_string()))?;
+        .ok_or_else(|| FigError::InvalidDocument("No blobs found in decoded data".to_string()))?;
     drop(json);
 
     let processed_blobs = blobs::process_blobs(blobs)?;
