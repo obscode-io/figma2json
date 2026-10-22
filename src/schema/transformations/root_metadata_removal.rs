@@ -1,6 +1,9 @@
 use crate::error::Result;
 use serde_json::Value as JsonValue;
 
+/// Metadata fields removed from the root object only.
+const ROOT_METADATA_FIELDS: [&str; 2] = ["version", "fileType"];
+
 /// Remove root-level metadata fields (version and fileType) from the JSON document
 ///
 /// These fields are Figma-specific metadata that are not needed for HTML/CSS rendering.
@@ -32,8 +35,9 @@ use serde_json::Value as JsonValue;
 /// ```
 pub fn remove_root_metadata(json: &mut JsonValue) -> Result<()> {
     if let Some(obj) = json.as_object_mut() {
-        obj.remove("version");
-        obj.remove("fileType");
+        for field in ROOT_METADATA_FIELDS {
+            obj.remove(field);
+        }
     }
     Ok(())
 }

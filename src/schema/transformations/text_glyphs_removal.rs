@@ -1,3 +1,4 @@
+use super::walk::for_each_object_mut;
 use crate::error::Result;
 use serde_json::Value as JsonValue;
 
@@ -31,44 +32,11 @@ use serde_json::Value as JsonValue;
 /// // tree now has "derivedTextData": {"layoutInfo": "preserved"}
 /// ```
 pub fn remove_text_glyphs(tree: &mut JsonValue) -> Result<()> {
-    transform_recursive(tree)
-}
-
-/// Recursively remove text glyphs from a JSON value
-fn transform_recursive(value: &mut JsonValue) -> Result<()> {
-    match value {
-        JsonValue::Object(map) => {
-            // Check if this object has a "derivedTextData" field
-            let keys: Vec<String> = map.keys().cloned().collect();
-
-            for key in keys {
-                if key == "derivedTextData" {
-                    // This field might contain glyphs to remove
-                    if let Some(derived_text_data) = map.get_mut(&key) {
-                        if let Some(obj) = derived_text_data.as_object_mut() {
-                            // Remove the "glyphs" field if it exists
-                            obj.remove("glyphs");
-                        }
-                    }
-                }
-
-                // Recurse into the value regardless
-                if let Some(val) = map.get_mut(&key) {
-                    transform_recursive(val)?;
-                }
-            }
+    for_each_object_mut(tree, &mut |map| {
+        if let Some(JsonValue::Object(derived_text_data)) = map.get_mut("derivedTextData") {
+            derived_text_data.remove("glyphs");
         }
-        JsonValue::Array(arr) => {
-            // Recurse into array elements
-            for val in arr.iter_mut() {
-                transform_recursive(val)?;
-            }
-        }
-        _ => {
-            // Primitives - nothing to do
-        }
-    }
-
+    });
     Ok(())
 }
 

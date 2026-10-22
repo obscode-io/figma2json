@@ -37,42 +37,28 @@ pub fn remove_visible_only_objects(tree: &mut JsonValue) -> Result<()> {
     Ok(())
 }
 
-/// Recursively remove visible-only objects from a JSON value
+/// Recursively remove visible-only objects from a JSON value.
+///
+/// Children are processed first, so a value that is left visible-only once its
+/// own children are cleaned up is removed too. Array elements are filtered as
+/// well, which is why this pass doesn't use the shared walker.
 fn transform_recursive(value: &mut JsonValue) {
     match value {
         JsonValue::Object(map) => {
-            // First, recurse into all values
-            let keys: Vec<String> = map.keys().cloned().collect();
-            for key in &keys {
-                if let Some(val) = map.get_mut(key) {
-                    transform_recursive(val);
-                }
-            }
-
-            // Then remove any keys whose values are visible-only objects
+            map.values_mut().for_each(transform_recursive);
             map.retain(|_, v| !is_visible_only_object(v));
         }
         JsonValue::Array(arr) => {
-            // First, recurse into array elements
-            for val in arr.iter_mut() {
-                transform_recursive(val);
-            }
-
-            // Then filter out visible-only objects from the array
+            arr.iter_mut().for_each(transform_recursive);
             arr.retain(|v| !is_visible_only_object(v));
         }
-        _ => {
-            // Primitives - nothing to do
-        }
+        _ => {}
     }
 }
 
 /// Check if a JSON value is an object with only a "visible" key
 fn is_visible_only_object(value: &JsonValue) -> bool {
-    match value {
-        JsonValue::Object(map) => map.len() == 1 && map.contains_key("visible"),
-        _ => false,
-    }
+    matches!(value, JsonValue::Object(map) if map.len() == 1 && map.contains_key("visible"))
 }
 
 #[cfg(test)]

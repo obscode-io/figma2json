@@ -1,3 +1,4 @@
+use super::walk::for_each_object_mut;
 use crate::error::Result;
 use serde_json::Value as JsonValue;
 
@@ -27,42 +28,15 @@ use serde_json::Value as JsonValue;
 /// // tree now has only "name" and "width" fields
 /// ```
 pub fn remove_default_uniform_scale_factor(tree: &mut JsonValue) -> Result<()> {
-    transform_recursive(tree)
-}
-
-/// Recursively remove default uniformScaleFactor fields from a JSON value
-fn transform_recursive(value: &mut JsonValue) -> Result<()> {
-    match value {
-        JsonValue::Object(map) => {
-            // Check if uniformScaleFactor exists and is 1.0
-            if let Some(scale_factor) = map.get("uniformScaleFactor") {
-                if let Some(num) = scale_factor.as_f64() {
-                    // Remove if exactly 1.0
-                    if (num - 1.0).abs() < f64::EPSILON {
-                        map.remove("uniformScaleFactor");
-                    }
-                }
-            }
-
-            // Recurse into all remaining values
-            let keys: Vec<String> = map.keys().cloned().collect();
-            for key in keys {
-                if let Some(val) = map.get_mut(&key) {
-                    transform_recursive(val)?;
-                }
-            }
+    for_each_object_mut(tree, &mut |map| {
+        let is_default = map
+            .get("uniformScaleFactor")
+            .and_then(JsonValue::as_f64)
+            .is_some_and(|num| (num - 1.0).abs() < f64::EPSILON);
+        if is_default {
+            map.remove("uniformScaleFactor");
         }
-        JsonValue::Array(arr) => {
-            // Recurse into array elements
-            for val in arr.iter_mut() {
-                transform_recursive(val)?;
-            }
-        }
-        _ => {
-            // Primitives - nothing to do
-        }
-    }
-
+    });
     Ok(())
 }
 

@@ -1,5 +1,34 @@
+use super::walk::for_each_object_mut;
 use crate::error::Result;
-use serde_json::Value as JsonValue;
+use serde_json::{Map, Value as JsonValue};
+
+/// A Figma default value for a text line field.
+#[derive(Clone, Copy)]
+enum LineDefault {
+    Int(i64),
+    Bool(bool),
+    Str(&'static str),
+}
+
+impl LineDefault {
+    fn matches(self, value: &JsonValue) -> bool {
+        match self {
+            Self::Int(n) => value.as_i64() == Some(n),
+            Self::Bool(b) => value.as_bool() == Some(b),
+            Self::Str(s) => value.as_str() == Some(s),
+        }
+    }
+}
+
+/// Line fields removed when they hold their default value.
+const LINE_DEFAULTS: [(&str, LineDefault); 6] = [
+    ("indentationLevel", LineDefault::Int(0)),
+    ("isFirstLineOfList", LineDefault::Bool(false)),
+    ("lineType", LineDefault::Str("PLAIN")),
+    ("listStartOffset", LineDefault::Int(0)),
+    ("sourceDirectionality", LineDefault::Str("AUTO")),
+    ("styleId", LineDefault::Int(0)),
+];
 
 /// Remove default text line properties from all objects in the JSON tree
 ///
@@ -48,100 +77,35 @@ use serde_json::Value as JsonValue;
 /// // The entire "lines" array is removed because all values were defaults
 /// ```
 pub fn remove_default_text_line_properties(tree: &mut JsonValue) -> Result<()> {
-    transform_recursive(tree)
-}
-
-/// Recursively remove default text line properties from a JSON value
-fn transform_recursive(value: &mut JsonValue) -> Result<()> {
-    match value {
-        JsonValue::Object(map) => {
-            // Check if this object has a "lines" array
-            if let Some(lines_value) = map.get_mut("lines") {
-                if let Some(lines_array) = lines_value.as_array_mut() {
-                    // Process each line object in the array
-                    for line in lines_array.iter_mut() {
-                        if let Some(line_obj) = line.as_object_mut() {
-                            remove_default_line_fields(line_obj);
-                        }
-                    }
-
-                    // Check if all lines are now empty objects
-                    // Only remove the lines array if it has elements and all of them are empty
-                    let all_empty = !lines_array.is_empty()
-                        && lines_array.iter().all(|line| {
-                            line.as_object().map(|obj| obj.is_empty()).unwrap_or(false)
-                        });
-
-                    // If all lines are empty, remove the entire "lines" array
-                    if all_empty {
-                        map.remove("lines");
-                    }
-                }
-            }
-
-            // Recurse into all remaining values
-            let keys: Vec<String> = map.keys().cloned().collect();
-            for key in keys {
-                if let Some(val) = map.get_mut(&key) {
-                    transform_recursive(val)?;
-                }
+    for_each_object_mut(tree, &mut |map| {
+        let Some(JsonValue::Array(lines)) = map.get_mut("lines") else {
+            return;
+        };
+        for line in lines.iter_mut() {
+            if let JsonValue::Object(line_obj) = line {
+                remove_default_line_fields(line_obj);
             }
         }
-        JsonValue::Array(arr) => {
-            // Recurse into array elements
-            for val in arr.iter_mut() {
-                transform_recursive(val)?;
-            }
+        // Only remove the lines array if it has elements and all of them are now empty
+        let all_empty = !lines.is_empty()
+            && lines
+                .iter()
+                .all(|line| matches!(line, JsonValue::Object(obj) if obj.is_empty()));
+        if all_empty {
+            map.remove("lines");
         }
-        _ => {
-            // Primitives - nothing to do
-        }
-    }
-
+    });
     Ok(())
 }
 
 /// Remove default-valued fields from a single line object
-fn remove_default_line_fields(line_obj: &mut serde_json::Map<String, JsonValue>) {
-    // Remove indentationLevel if 0
-    if let Some(val) = line_obj.get("indentationLevel") {
-        if val.as_i64() == Some(0) {
-            line_obj.remove("indentationLevel");
-        }
-    }
-
-    // Remove isFirstLineOfList if false
-    if let Some(val) = line_obj.get("isFirstLineOfList") {
-        if val.as_bool() == Some(false) {
-            line_obj.remove("isFirstLineOfList");
-        }
-    }
-
-    // Remove lineType if "PLAIN"
-    if let Some(val) = line_obj.get("lineType") {
-        if val.as_str() == Some("PLAIN") {
-            line_obj.remove("lineType");
-        }
-    }
-
-    // Remove listStartOffset if 0
-    if let Some(val) = line_obj.get("listStartOffset") {
-        if val.as_i64() == Some(0) {
-            line_obj.remove("listStartOffset");
-        }
-    }
-
-    // Remove sourceDirectionality if "AUTO"
-    if let Some(val) = line_obj.get("sourceDirectionality") {
-        if val.as_str() == Some("AUTO") {
-            line_obj.remove("sourceDirectionality");
-        }
-    }
-
-    // Remove styleId if 0
-    if let Some(val) = line_obj.get("styleId") {
-        if val.as_i64() == Some(0) {
-            line_obj.remove("styleId");
+fn remove_default_line_fields(line_obj: &mut Map<String, JsonValue>) {
+    for (field, default) in LINE_DEFAULTS {
+        if line_obj
+            .get(field)
+            .is_some_and(|value| default.matches(value))
+        {
+            line_obj.remove(field);
         }
     }
 }

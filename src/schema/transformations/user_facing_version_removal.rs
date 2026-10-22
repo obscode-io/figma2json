@@ -1,3 +1,4 @@
+use super::walk::for_each_object_mut;
 use crate::error::Result;
 use serde_json::Value as JsonValue;
 
@@ -27,35 +28,9 @@ use serde_json::Value as JsonValue;
 /// // tree now has only "name", "type", and "visible" fields
 /// ```
 pub fn remove_user_facing_versions(tree: &mut JsonValue) -> Result<()> {
-    transform_recursive(tree)
-}
-
-/// Recursively remove userFacingVersion fields from a JSON value
-fn transform_recursive(value: &mut JsonValue) -> Result<()> {
-    match value {
-        JsonValue::Object(map) => {
-            // Remove the "userFacingVersion" field if it exists
-            map.remove("userFacingVersion");
-
-            // Recurse into all remaining values
-            let keys: Vec<String> = map.keys().cloned().collect();
-            for key in keys {
-                if let Some(val) = map.get_mut(&key) {
-                    transform_recursive(val)?;
-                }
-            }
-        }
-        JsonValue::Array(arr) => {
-            // Recurse into array elements
-            for val in arr.iter_mut() {
-                transform_recursive(val)?;
-            }
-        }
-        _ => {
-            // Primitives - nothing to do
-        }
-    }
-
+    for_each_object_mut(tree, &mut |map| {
+        map.remove("userFacingVersion");
+    });
     Ok(())
 }
 

@@ -13,7 +13,8 @@
 //!   prototype targets, property ids) and `guidPath`s become `"s:l"` strings, which
 //!   the later removal passes leave alone.
 //! - **Variables**: every variable binding (`ALIAS`) gets `variable` (its name),
-//!   `variableCollection` and `variableId` (matching `id` in the root `variables`). Without this, only the resolved value survives.
+//!   `variableCollection` and `variableId` (matching `id` in the root `variables`).
+//!   Without this, only the resolved value survives.
 //! - **Styles**: `styleIdForFill` / `Text` / `Stroke` / `Effect` / `Grid` become
 //!   `fillStyle` / `textStyle` / ... with the style's name.
 //! - **Instances**: `componentId`, `componentName` and, for variants,
@@ -31,6 +32,18 @@ use std::collections::HashMap;
 
 /// Sentinel Figma uses for "no style" (`{sessionID: u32::MAX, localID: u32::MAX}`).
 const NO_ID: &str = "4294967295:4294967295";
+
+/// Prefix marking a `variable_set` entry that still holds a library key.
+const KEY_PREFIX: &str = "key:";
+
+/// Shared-style reference fields and the name fields they become.
+const STYLE_FIELDS: [(&str, &str); 5] = [
+    ("styleIdForFill", "fillStyle"),
+    ("styleIdForStrokeFill", "strokeStyle"),
+    ("styleIdForText", "textStyle"),
+    ("styleIdForEffect", "effectStyle"),
+    ("styleIdForGrid", "gridStyle"),
+];
 
 /// Variable collections and styles found in the file, ready for the output root.
 #[derive(Debug, Default)]
@@ -65,11 +78,20 @@ fn guid_string(value: &JsonValue) -> Option<String> {
     Some(format!("{}:{}", session, local))
 }
 
-/// True for an object holding exactly `sessionID` and `localID`.
-fn is_guid_object(value: &JsonValue) -> bool {
-    match value.as_object() {
-        Some(obj) => obj.len() == 2 && guid_string(value).is_some(),
-        None => false,
+/// The id of an object holding exactly `sessionID` and `localID`.
+fn bare_guid(value: &JsonValue) -> Option<String> {
+    match value {
+        JsonValue::Object(obj) if obj.len() == 2 => guid_string(value),
+        _ => None,
+    }
+}
+
+/// `JsonValue::String(id)`, or `null` for the "no id" sentinel.
+fn id_or_null(id: String) -> JsonValue {
+    if id == NO_ID {
+        JsonValue::Null
+    } else {
+        JsonValue::String(id)
     }
 }
 
@@ -104,111 +126,229 @@ fn wrapped_ref(value: &JsonValue, index: &Index) -> Option<String> {
     index.by_key.get(key).cloned()
 }
 
-fn node_type(node: &JsonValue) -> String {
+/// A node's `type`, whether a plain string or a `{value}` enum object.
+fn node_type(node: &JsonValue) -> &str {
     match node.get("type") {
-        Some(JsonValue::String(s)) => s.clone(),
-        Some(t) => t
-            .get("value")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string(),
-        None => String::new(),
+        Some(JsonValue::String(s)) => s,
+        Some(t) => t.get("value").and_then(JsonValue::as_str).unwrap_or(""),
+        None => "",
     }
 }
 
-fn build_index(node: &JsonValue, parent: Option<&str>, index: &mut Index) {
-    let Some(obj) = node.as_object() else { return };
-    let Some(id) = obj.get("guid").and_then(guid_string) else {
-        return;
-    };
+fn str_field<'a>(obj: &'a Map<String, JsonValue>, field: &str) -> Option<&'a str> {
+    obj.get(field).and_then(JsonValue::as_str)
+}
 
-    let info = NodeInfo {
-        name: obj
-            .get("name")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string(),
-        node_type: node_type(node),
-        parent: parent.map(str::to_string),
-        is_state_group: obj
-            .get("isStateGroup")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false),
-    };
-    if let Some(key) = obj.get("key").and_then(|v| v.as_str()) {
-        index.by_key.insert(key.to_string(), id.clone());
+fn is_true(obj: &Map<String, JsonValue>, field: &str) -> bool {
+    obj.get(field).and_then(JsonValue::as_bool) == Some(true)
+}
+
+impl Index {
+    fn build(document: &JsonValue) -> Self {
+        let mut index = Self::default();
+        index.add_node(document, None);
+        index.resolve_variable_set_keys();
+        index
     }
-    if info.node_type == "VARIABLE" {
-        if let Some(set) = obj.get("variableSetID") {
-            // variableSetID is {guid} for local collections or {assetRef} for library ones;
-            // keys are indexed in a second pass, so stash the raw form for now.
-            let set_ref = guid_string(set.get("guid").unwrap_or(&JsonValue::Null)).or_else(|| {
-                set.get("assetRef")
-                    .and_then(|a| a.get("key"))
-                    .and_then(|k| k.as_str())
-                    .map(|k| format!("key:{}", k))
-            });
-            if let Some(set_ref) = set_ref {
-                index.variable_set.insert(id.clone(), set_ref);
+
+    fn add_node(&mut self, node: &JsonValue, parent: Option<&str>) {
+        let Some(obj) = node.as_object() else { return };
+        let Some(id) = obj.get("guid").and_then(guid_string) else {
+            return;
+        };
+
+        let info = NodeInfo {
+            name: str_field(obj, "name").unwrap_or("").to_string(),
+            node_type: node_type(node).to_string(),
+            parent: parent.map(str::to_string),
+            is_state_group: is_true(obj, "isStateGroup"),
+        };
+        if let Some(key) = str_field(obj, "key") {
+            self.by_key.insert(key.to_string(), id.clone());
+        }
+        if info.node_type == "VARIABLE" {
+            if let Some(set_ref) = obj.get("variableSetID").and_then(variable_set_ref) {
+                self.variable_set.insert(id.clone(), set_ref);
+            }
+        }
+        self.nodes.insert(id.clone(), info);
+
+        if let Some(children) = obj.get("children").and_then(JsonValue::as_array) {
+            for child in children {
+                self.add_node(child, Some(&id));
             }
         }
     }
-    index.nodes.insert(id.clone(), info);
 
-    if let Some(children) = obj.get("children").and_then(|c| c.as_array()) {
-        for child in children {
-            build_index(child, Some(&id), index);
-        }
-    }
-}
-
-/// Resolve the "key:..." placeholders left in `variable_set` once all keys are known.
-fn finish_index(index: &mut Index) {
-    let by_key = index.by_key.clone();
-    for set in index.variable_set.values_mut() {
-        if let Some(key) = set.strip_prefix("key:") {
-            if let Some(id) = by_key.get(key) {
+    /// Resolve the `"key:..."` placeholders left in `variable_set` once all keys are known.
+    fn resolve_variable_set_keys(&mut self) {
+        let Self {
+            by_key,
+            variable_set,
+            ..
+        } = self;
+        for set in variable_set.values_mut() {
+            if let Some(id) = set.strip_prefix(KEY_PREFIX).and_then(|key| by_key.get(key)) {
                 *set = id.clone();
             }
         }
     }
-}
 
-/// `(variable name, collection name)` for a variable guid.
-fn variable_names(id: &str, index: &Index) -> Option<(String, Option<String>)> {
-    let info = index.nodes.get(id)?;
-    if info.node_type != "VARIABLE" {
-        return None;
-    }
-    let collection = index
-        .variable_set
-        .get(id)
-        .and_then(|set| index.nodes.get(set))
-        .map(|set| set.name.clone());
-    Some((info.name.clone(), collection))
-}
-
-/// Add `variable` / `variableCollection` to an ALIAS value object, in place.
-fn annotate_alias(
-    obj: &mut Map<String, JsonValue>,
-    index: &Index,
-    uses: &mut HashMap<String, u64>,
-    counting: bool,
-) {
-    if obj.get("dataType").and_then(|v| v.as_str()) != Some("ALIAS") {
-        return;
-    }
-    let target = obj
-        .get("value")
-        .and_then(|v| v.get("alias"))
-        .and_then(|alias| resolve_ref(alias, index));
-    if let Some((name, collection)) = target.as_deref().and_then(|id| variable_names(id, index)) {
-        if let Some(id) = &target {
-            if counting {
-                *uses.entry(id.clone()).or_default() += 1;
-            }
-            obj.insert("variableId".to_string(), JsonValue::String(id.clone()));
+    /// `(variable name, collection name)` for a variable guid.
+    fn variable_names(&self, id: &str) -> Option<(String, Option<String>)> {
+        let info = self.nodes.get(id)?;
+        if info.node_type != "VARIABLE" {
+            return None;
         }
+        let collection = self
+            .variable_set
+            .get(id)
+            .and_then(|set| self.nodes.get(set))
+            .map(|set| set.name.clone());
+        Some((info.name.clone(), collection))
+    }
+}
+
+/// A variable's collection: `variableSetID` is `{guid}` for local collections or
+/// `{assetRef}` for library ones. Keys are only all known after indexing the whole
+/// tree, so library ones are stashed as `"key:..."` for now.
+fn variable_set_ref(set: &JsonValue) -> Option<String> {
+    set.get("guid").and_then(guid_string).or_else(|| {
+        set.get("assetRef")
+            .and_then(|a| a.get("key"))
+            .and_then(JsonValue::as_str)
+            .map(|k| format!("{}{}", KEY_PREFIX, k))
+    })
+}
+
+/// Public name for an internal node type, if it differs.
+fn public_type(node_type: &str, is_state_group: bool) -> Option<&'static str> {
+    match node_type {
+        // Component sets are stored as FRAME (sometimes SYMBOL) nodes with isStateGroup
+        "FRAME" | "SYMBOL" if is_state_group => Some("COMPONENT_SET"),
+        "SYMBOL" => Some("COMPONENT"),
+        "ROUNDED_RECTANGLE" => Some("RECTANGLE"),
+        _ => None,
+    }
+}
+
+/// guidPath `{guids: [...]}` -> `"s:l/s:l"` (which child an override targets).
+fn flatten_guid_path(obj: &mut Map<String, JsonValue>) {
+    let Some(guids) = obj
+        .get("guidPath")
+        .and_then(|path| path.get("guids"))
+        .and_then(JsonValue::as_array)
+    else {
+        return;
+    };
+    let parts: Vec<String> = guids.iter().filter_map(guid_string).collect();
+    if parts.len() == guids.len() {
+        obj.insert("guidPath".to_string(), JsonValue::String(parts.join("/")));
+    }
+}
+
+/// Walks the document, annotating it and counting variable and style uses.
+struct Annotator<'a> {
+    index: &'a Index,
+    /// guid of each variable and style -> how often the design uses it
+    uses: HashMap<String, u64>,
+}
+
+impl Annotator<'_> {
+    fn count_use(&mut self, id: String, counting: bool) {
+        if counting {
+            *self.uses.entry(id).or_default() += 1;
+        }
+    }
+
+    /// Annotate one value (and recurse into everything below it).
+    fn annotate(&mut self, value: &mut JsonValue, in_node_position: bool, counting: bool) {
+        match value {
+            JsonValue::Object(obj) => self.annotate_object(obj, in_node_position, counting),
+            JsonValue::Array(items) => {
+                for item in items.iter_mut() {
+                    if let Some(id) = wrapped_ref(item, self.index) {
+                        *item = id_or_null(id);
+                    } else if let Some(id) = bare_guid(item) {
+                        // Unlike object fields, list entries keep the sentinel as a string.
+                        *item = JsonValue::String(id);
+                    } else {
+                        self.annotate(item, in_node_position, counting);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn annotate_object(
+        &mut self,
+        obj: &mut Map<String, JsonValue>,
+        in_node_position: bool,
+        counting: bool,
+    ) {
+        let is_node = in_node_position && obj.contains_key("guid") && obj.contains_key("type");
+
+        // Internal-only pages hold definitions (variables, styles, and local copies of
+        // library components), not the design itself: annotate them (they can be kept
+        // with `keep_internal`) but don't count them in `uses`.
+        let counting = counting && !(is_node && is_true(obj, "internalOnly"));
+
+        if is_node {
+            annotate_node(obj, self.index);
+        }
+        // Shared styles (on nodes, and inside instance overrides)
+        self.annotate_styles(obj, counting);
+        self.annotate_alias(obj, counting);
+        flatten_guid_path(obj);
+
+        for (key, child) in obj.iter_mut() {
+            if key == "guid" && is_node {
+                continue; // removed later by remove_guid_fields; `id` replaces it
+            }
+            // {guid: {...}} / {assetRef: {key}} wrappers (instance-swap and slot values,
+            // aliases, collection ids): replace with the id, or remove_guid_fields would
+            // empty them and the value would be lost.
+            if let Some(id) = wrapped_ref(child, self.index).or_else(|| bare_guid(child)) {
+                *child = id_or_null(id);
+            } else {
+                self.annotate(child, key == "children", counting);
+            }
+        }
+    }
+
+    /// Add `fillStyle` / `textStyle` / ... names for shared-style references.
+    fn annotate_styles(&mut self, obj: &mut Map<String, JsonValue>, counting: bool) {
+        let index = self.index;
+        for (field, out) in STYLE_FIELDS {
+            let Some(id) = obj.get(field).and_then(|r| resolve_ref(r, index)) else {
+                continue;
+            };
+            let Some(info) = index.nodes.get(&id) else {
+                continue;
+            };
+            self.count_use(id, counting);
+            obj.insert(out.to_string(), JsonValue::String(info.name.clone()));
+        }
+    }
+
+    /// Add `variable` / `variableCollection` / `variableId` to an ALIAS value object.
+    fn annotate_alias(&mut self, obj: &mut Map<String, JsonValue>, counting: bool) {
+        if str_field(obj, "dataType") != Some("ALIAS") {
+            return;
+        }
+        let Some(id) = obj
+            .get("value")
+            .and_then(|v| v.get("alias"))
+            .and_then(|alias| resolve_ref(alias, self.index))
+        else {
+            return;
+        };
+        let Some((name, collection)) = self.index.variable_names(&id) else {
+            return;
+        };
+        self.count_use(id.clone(), counting);
+        obj.insert("variableId".to_string(), JsonValue::String(id));
         obj.insert("variable".to_string(), JsonValue::String(name));
         if let Some(collection) = collection {
             obj.insert(
@@ -219,336 +359,204 @@ fn annotate_alias(
     }
 }
 
-const STYLE_FIELDS: [(&str, &str); 5] = [
-    ("styleIdForFill", "fillStyle"),
-    ("styleIdForStrokeFill", "strokeStyle"),
-    ("styleIdForText", "textStyle"),
-    ("styleIdForEffect", "effectStyle"),
-    ("styleIdForGrid", "gridStyle"),
-];
-
-/// Annotate one design node (and recurse into everything below it).
-fn annotate(
-    value: &mut JsonValue,
-    index: &Index,
-    in_node_position: bool,
-    uses: &mut HashMap<String, u64>,
-    counting: bool,
-) {
-    match value {
-        JsonValue::Object(obj) => {
-            let is_node = in_node_position && obj.contains_key("guid") && obj.contains_key("type");
-
-            // Internal-only pages hold definitions (variables, styles, and local copies of
-            // library components), not the design itself: annotate them (they can be kept
-            // with `keep_internal`) but don't count them in `uses`.
-            let counting = counting
-                && !(is_node && obj.get("internalOnly").and_then(|v| v.as_bool()) == Some(true));
-
-            if is_node {
-                if let Some(id) = obj.get("guid").and_then(guid_string) {
-                    obj.insert("id".to_string(), JsonValue::String(id));
-                }
-
-                // Public node type names
-                let t = obj
-                    .get("type")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string();
-                // Component sets are stored as FRAME (sometimes SYMBOL) nodes with isStateGroup
-                let is_state_group =
-                    obj.get("isStateGroup").and_then(|v| v.as_bool()) == Some(true);
-                let public = match t.as_str() {
-                    "FRAME" | "SYMBOL" if is_state_group => Some("COMPONENT_SET"),
-                    "SYMBOL" => Some("COMPONENT"),
-                    "ROUNDED_RECTANGLE" => Some("RECTANGLE"),
-                    _ => None,
-                };
-                if let Some(public) = public {
-                    obj.insert("type".to_string(), JsonValue::String(public.to_string()));
-                }
-
-                // Instance -> component
-                if t == "INSTANCE" {
-                    let component = obj
-                        .get("symbolData")
-                        .and_then(|s| s.get("symbolID"))
-                        .and_then(|r| resolve_ref(r, index));
-                    if let Some(component_id) = component {
-                        if let Some(info) = index.nodes.get(&component_id) {
-                            obj.insert(
-                                "componentName".to_string(),
-                                JsonValue::String(info.name.clone()),
-                            );
-                            let set = info.parent.as_ref().and_then(|p| index.nodes.get(p));
-                            if let Some(set) = set.filter(|s| s.is_state_group) {
-                                obj.insert(
-                                    "componentSetName".to_string(),
-                                    JsonValue::String(set.name.clone()),
-                                );
-                            }
-                        }
-                        obj.insert("componentId".to_string(), JsonValue::String(component_id));
-                    }
-                }
-            }
-
-            // Shared styles (on nodes, and inside instance overrides)
-            for (field, out) in STYLE_FIELDS {
-                if let Some(reference) = obj.get(field) {
-                    let style = resolve_ref(reference, index)
-                        .and_then(|id| index.nodes.get(&id).map(|info| (id, info.name.clone())));
-                    if let Some((id, name)) = style {
-                        if counting {
-                            *uses.entry(id).or_default() += 1;
-                        }
-                        obj.insert(out.to_string(), JsonValue::String(name));
-                    }
-                }
-            }
-
-            annotate_alias(obj, index, uses, counting);
-
-            // guidPath {guids: [...]} -> "s:l/s:l" (which child an override targets)
-            if let Some(path) = obj.get("guidPath") {
-                if let Some(guids) = path.get("guids").and_then(|g| g.as_array()) {
-                    let parts: Vec<String> = guids.iter().filter_map(guid_string).collect();
-                    if parts.len() == guids.len() {
-                        obj.insert("guidPath".to_string(), JsonValue::String(parts.join("/")));
-                    }
-                }
-            }
-
-            for (key, child) in obj.iter_mut() {
-                if key == "guid" && is_node {
-                    continue; // removed later by remove_guid_fields; `id` replaces it
-                }
-                // {guid: {...}} / {assetRef: {key}} wrappers (instance-swap and slot values,
-                // aliases, collection ids): replace with the id, or remove_guid_fields would
-                // empty them and the value would be lost.
-                if let Some(id) = wrapped_ref(child, index) {
-                    *child = if id == NO_ID {
-                        JsonValue::Null
-                    } else {
-                        JsonValue::String(id)
-                    };
-                    continue;
-                }
-                if is_guid_object(child) {
-                    if let Some(s) = guid_string(child) {
-                        *child = if s == NO_ID {
-                            JsonValue::Null
-                        } else {
-                            JsonValue::String(s)
-                        };
-                    }
-                    continue;
-                }
-                annotate(child, index, key == "children", uses, counting);
-            }
-        }
-        JsonValue::Array(items) => {
-            for item in items.iter_mut() {
-                if let Some(id) = wrapped_ref(item, index) {
-                    *item = if id == NO_ID {
-                        JsonValue::Null
-                    } else {
-                        JsonValue::String(id)
-                    };
-                    continue;
-                }
-                if is_guid_object(item) {
-                    if let Some(s) = guid_string(item) {
-                        *item = JsonValue::String(s);
-                    }
-                    continue;
-                }
-                annotate(item, index, in_node_position, uses, counting);
-            }
-        }
-        _ => {}
+/// Add `id`, the public `type` and, for instances, the component it uses.
+fn annotate_node(obj: &mut Map<String, JsonValue>, index: &Index) {
+    if let Some(id) = obj.get("guid").and_then(guid_string) {
+        obj.insert("id".to_string(), JsonValue::String(id));
     }
+
+    let node_type = str_field(obj, "type").unwrap_or("");
+    let is_instance = node_type == "INSTANCE";
+    if let Some(public) = public_type(node_type, is_true(obj, "isStateGroup")) {
+        obj.insert("type".to_string(), JsonValue::String(public.to_string()));
+    }
+    if is_instance {
+        link_component(obj, index);
+    }
+}
+
+/// Instance -> `componentId`, `componentName` and, for variants, `componentSetName`.
+fn link_component(obj: &mut Map<String, JsonValue>, index: &Index) {
+    let Some(component_id) = obj
+        .get("symbolData")
+        .and_then(|s| s.get("symbolID"))
+        .and_then(|r| resolve_ref(r, index))
+    else {
+        return;
+    };
+    if let Some(info) = index.nodes.get(&component_id) {
+        obj.insert(
+            "componentName".to_string(),
+            JsonValue::String(info.name.clone()),
+        );
+        let set = info.parent.as_ref().and_then(|p| index.nodes.get(p));
+        if let Some(set) = set.filter(|s| s.is_state_group) {
+            obj.insert(
+                "componentSetName".to_string(),
+                JsonValue::String(set.name.clone()),
+            );
+        }
+    }
+    obj.insert("componentId".to_string(), JsonValue::String(component_id));
 }
 
 /// Convert one `variableData` value to a plain value, or `{alias: name}`.
 fn variable_value(data: &JsonValue, index: &Index) -> JsonValue {
-    let data_type = data.get("dataType").and_then(|v| v.as_str()).unwrap_or("");
-    let value = data.get("value").cloned().unwrap_or(JsonValue::Null);
-    if data_type == "ALIAS" {
+    let value = data.get("value").unwrap_or(&JsonValue::Null);
+    if data.get("dataType").and_then(JsonValue::as_str) == Some("ALIAS") {
         let target = value.get("alias").and_then(|a| resolve_ref(a, index));
-        return match target.as_deref().and_then(|id| variable_names(id, index)) {
+        return match target.and_then(|id| index.variable_names(&id)) {
             Some((name, Some(collection))) => json!({"alias": name, "aliasCollection": collection}),
             Some((name, None)) => json!({"alias": name}),
             None => json!({"alias": null}),
         };
     }
     // {"colorValue": "#fff"} / {"floatValue": 4} / {"textValue": ".."} / {"boolValue": true}
-    match value.as_object() {
-        Some(obj) if obj.len() == 1 => obj.values().next().cloned().unwrap_or(JsonValue::Null),
-        _ => value,
+    match value.as_object().filter(|obj| obj.len() == 1) {
+        Some(obj) => obj.values().next().cloned().unwrap_or(JsonValue::Null),
+        None => value.clone(),
     }
 }
 
-fn collect_definitions(
-    node: &JsonValue,
-    index: &Index,
-    out: &mut (Vec<JsonValue>, Vec<JsonValue>, Vec<JsonValue>),
-) {
-    let Some(obj) = node.as_object() else { return };
-    let t = node_type(node);
-    let id = obj.get("guid").and_then(guid_string).unwrap_or_default();
-    let name = obj.get("name").cloned().unwrap_or(JsonValue::Null);
-
-    if t == "VARIABLE_SET" {
-        let modes: Vec<JsonValue> = obj
-            .get("variableSetModes")
-            .and_then(|m| m.as_array())
-            .map(|modes| {
-                modes
-                    .iter()
-                    .map(
-                        |m| json!({"id": m.get("id").and_then(guid_string), "name": m.get("name")}),
-                    )
-                    .collect()
-            })
-            .unwrap_or_default();
-        out.0.push(json!({
-            "id": id,
-            "name": name,
-            "key": obj.get("key"),
-            "sourceLibraryKey": obj.get("sourceLibraryKey"),
-            "modes": modes,
-        }));
-    } else if t == "VARIABLE" {
-        let mut values = Map::new();
-        if let Some(entries) = obj
-            .get("variableDataValues")
-            .and_then(|v| v.get("entries"))
-            .and_then(|e| e.as_array())
-        {
-            for entry in entries {
-                let mode = entry
-                    .get("modeID")
-                    .and_then(guid_string)
-                    .unwrap_or_default();
-                let data = entry
-                    .get("variableData")
-                    .cloned()
-                    .unwrap_or(JsonValue::Null);
-                values.insert(mode, variable_value(&data, index));
-            }
-        }
-        out.1.push(json!({
-            "id": id,
-            "name": name,
-            "key": obj.get("key"),
-            "collectionId": index.variable_set.get(&id),
-            "type": obj.get("variableResolvedType"),
-            "scopes": obj.get("variableScopes"),
-            "description": obj.get("description"),
-            "valuesByMode": values,
-        }));
-    } else if let Some(style_type) = obj.get("styleType") {
-        let mut style = json!({
-            "id": id,
-            "name": name,
-            "key": obj.get("key"),
-            "styleType": style_type,
-            "sourceLibraryKey": obj.get("sourceLibraryKey"),
-        });
-        let fields: &[&str] = match style_type.as_str().unwrap_or("") {
-            "FILL" => &["fillPaints"],
-            "TEXT" => &[
-                "fontName",
-                "fontSize",
-                "lineHeight",
-                "letterSpacing",
-                "textCase",
-                "textDecoration",
-                "paragraphSpacing",
-            ],
-            "EFFECT" => &["effects"],
-            "GRID" => &["layoutGrids"],
-            _ => &[],
-        };
-        for field in fields {
-            if let Some(v) = obj.get(*field) {
-                style[*field] = v.clone();
-            }
-        }
-        if let Some(d) = obj
-            .get("description")
-            .filter(|d| d.as_str().is_some_and(|s| !s.is_empty()))
-        {
-            style["description"] = d.clone();
-        }
-        out.2.push(style);
-    }
-
-    if let Some(children) = obj.get("children").and_then(|c| c.as_array()) {
-        for child in children {
-            collect_definitions(child, index, out);
-        }
+/// Fields copied into a style definition, by `styleType`.
+fn style_fields(style_type: &str) -> &'static [&'static str] {
+    match style_type {
+        "FILL" => &["fillPaints"],
+        "TEXT" => &[
+            "fontName",
+            "fontSize",
+            "lineHeight",
+            "letterSpacing",
+            "textCase",
+            "textDecoration",
+            "paragraphSpacing",
+        ],
+        "EFFECT" => &["effects"],
+        "GRID" => &["layoutGrids"],
+        _ => &[],
     }
 }
 
-/// Drop null fields (e.g. no `sourceLibraryKey` on local definitions).
-fn tidy(value: &mut JsonValue) {
-    if let Some(obj) = value.as_object_mut() {
-        obj.retain(|_, v| !v.is_null());
-    }
+/// Variable collections, variables and styles defined in the file, in tree order.
+#[derive(Default)]
+struct Definitions {
+    collections: Vec<JsonValue>,
+    variables: Vec<JsonValue>,
+    styles: Vec<JsonValue>,
 }
 
-/// Annotate the document in place and return the file's variables and styles.
-pub fn add_design_context(document: &mut JsonValue) -> Result<DesignDefinitions> {
-    let mut index = Index::default();
-    build_index(document, None, &mut index);
-    finish_index(&mut index);
+impl Definitions {
+    fn collect(document: &JsonValue, index: &Index) -> Self {
+        let mut definitions = Self::default();
+        definitions.add_node(document, index);
+        definitions
+    }
 
-    let mut found = (Vec::new(), Vec::new(), Vec::new());
-    collect_definitions(document, &index, &mut found);
-    let (mut collections, variables, mut styles) = found;
+    fn add_node(&mut self, node: &JsonValue, index: &Index) {
+        let Some(obj) = node.as_object() else { return };
+        let id = obj.get("guid").and_then(guid_string).unwrap_or_default();
 
-    // Nest variables under their collection
-    for collection in collections.iter_mut() {
-        let cid = collection["id"].as_str().unwrap_or("").to_string();
-        let mode_names: HashMap<String, String> = collection["modes"]
-            .as_array()
-            .map(|m| {
-                m.iter()
-                    .filter_map(|m| {
-                        Some((
-                            m["id"].as_str()?.to_string(),
-                            m["name"].as_str()?.to_string(),
-                        ))
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
-        let mut vars: Vec<JsonValue> = variables
-            .iter()
-            .filter(|v| v["collectionId"].as_str() == Some(cid.as_str()))
-            .cloned()
-            .collect();
-        for v in vars.iter_mut() {
-            // Key values by mode NAME ("Desktop (1440px)") instead of mode id
-            if let Some(values) = v.get_mut("valuesByMode").and_then(|x| x.as_object_mut()) {
-                let renamed: Map<String, JsonValue> = std::mem::take(values)
-                    .into_iter()
-                    .map(|(mode, val)| (mode_names.get(&mode).cloned().unwrap_or(mode), val))
-                    .collect();
-                *values = renamed;
-            }
-            if let Some(o) = v.as_object_mut() {
-                o.remove("collectionId");
-                if o.get("description")
-                    .is_some_and(|d| d.is_null() || d.as_str() == Some(""))
-                {
-                    o.remove("description");
+        match node_type(node) {
+            "VARIABLE_SET" => self.collections.push(collection_definition(obj, id)),
+            "VARIABLE" => self.variables.push(variable_definition(obj, id, index)),
+            _ => {
+                if let Some(style_type) = obj.get("styleType") {
+                    self.styles.push(style_definition(obj, id, style_type));
                 }
             }
         }
+
+        if let Some(children) = obj.get("children").and_then(JsonValue::as_array) {
+            for child in children {
+                self.add_node(child, index);
+            }
+        }
+    }
+}
+
+fn collection_definition(obj: &Map<String, JsonValue>, id: String) -> JsonValue {
+    let modes: Vec<JsonValue> = obj
+        .get("variableSetModes")
+        .and_then(JsonValue::as_array)
+        .map(|modes| {
+            modes
+                .iter()
+                .map(|m| json!({"id": m.get("id").and_then(guid_string), "name": m.get("name")}))
+                .collect()
+        })
+        .unwrap_or_default();
+    json!({
+        "id": id,
+        "name": obj.get("name"),
+        "key": obj.get("key"),
+        "sourceLibraryKey": obj.get("sourceLibraryKey"),
+        "modes": modes,
+    })
+}
+
+fn variable_definition(obj: &Map<String, JsonValue>, id: String, index: &Index) -> JsonValue {
+    let mut values = Map::new();
+    let entries = obj
+        .get("variableDataValues")
+        .and_then(|v| v.get("entries"))
+        .and_then(JsonValue::as_array);
+    for entry in entries.into_iter().flatten() {
+        let mode = entry
+            .get("modeID")
+            .and_then(guid_string)
+            .unwrap_or_default();
+        let data = entry.get("variableData").unwrap_or(&JsonValue::Null);
+        values.insert(mode, variable_value(data, index));
+    }
+    json!({
+        "collectionId": index.variable_set.get(&id),
+        "id": id,
+        "name": obj.get("name"),
+        "key": obj.get("key"),
+        "type": obj.get("variableResolvedType"),
+        "scopes": obj.get("variableScopes"),
+        "description": obj.get("description"),
+        "valuesByMode": values,
+    })
+}
+
+fn style_definition(obj: &Map<String, JsonValue>, id: String, style_type: &JsonValue) -> JsonValue {
+    let mut style = Map::new();
+    style.insert("id".to_string(), JsonValue::String(id));
+    style.insert("name".to_string(), json!(obj.get("name")));
+    style.insert("key".to_string(), json!(obj.get("key")));
+    style.insert("styleType".to_string(), style_type.clone());
+    style.insert(
+        "sourceLibraryKey".to_string(),
+        json!(obj.get("sourceLibraryKey")),
+    );
+    for &field in style_fields(style_type.as_str().unwrap_or("")) {
+        if let Some(v) = obj.get(field) {
+            style.insert(field.to_string(), v.clone());
+        }
+    }
+    if let Some(d) = obj
+        .get("description")
+        .filter(|d| d.as_str().is_some_and(|s| !s.is_empty()))
+    {
+        style.insert("description".to_string(), d.clone());
+    }
+    JsonValue::Object(style)
+}
+
+/// Copy each variable into its collection's `variables`, keyed by mode name; variables
+/// without a known collection go into a trailing "(unknown collection)".
+fn nest_variables(collections: &mut Vec<JsonValue>, variables: Vec<JsonValue>) {
+    for collection in collections.iter_mut() {
+        let vars: Vec<JsonValue> = {
+            let cid = collection["id"].as_str().unwrap_or("");
+            let mode_names = mode_names(collection);
+            variables
+                .iter()
+                .filter(|v| v["collectionId"].as_str() == Some(cid))
+                .map(|v| nested_variable(v, &mode_names))
+                .collect()
+        };
         collection["variables"] = JsonValue::Array(vars);
     }
     let orphans: Vec<JsonValue> = variables
@@ -564,11 +572,60 @@ pub fn add_design_context(document: &mut JsonValue) -> Result<DesignDefinitions>
             json!({"id": null, "name": "(unknown collection)", "modes": [], "variables": orphans}),
         );
     }
+}
 
-    // Annotate the design tree, counting how often each variable and style is used
-    let mut uses: HashMap<String, u64> = HashMap::new();
-    annotate(document, &index, true, &mut uses, true);
+/// Mode id -> mode name for a collection definition.
+fn mode_names(collection: &JsonValue) -> HashMap<&str, &str> {
+    collection["modes"]
+        .as_array()
+        .map(|modes| {
+            modes
+                .iter()
+                .filter_map(|m| Some((m["id"].as_str()?, m["name"].as_str()?)))
+                .collect()
+        })
+        .unwrap_or_default()
+}
 
+/// A variable definition as listed in its collection: values keyed by mode NAME
+/// ("Desktop (1440px)") instead of mode id, without `collectionId` or an empty
+/// `description`.
+fn nested_variable(variable: &JsonValue, mode_names: &HashMap<&str, &str>) -> JsonValue {
+    let mut v = variable.clone();
+    if let Some(values) = v.get_mut("valuesByMode").and_then(JsonValue::as_object_mut) {
+        *values = std::mem::take(values)
+            .into_iter()
+            .map(|(mode, val)| {
+                let name = mode_names.get(mode.as_str()).map(|n| n.to_string());
+                (name.unwrap_or(mode), val)
+            })
+            .collect();
+    }
+    if let Some(o) = v.as_object_mut() {
+        o.remove("collectionId");
+        if o.get("description")
+            .is_some_and(|d| d.is_null() || d.as_str() == Some(""))
+        {
+            o.remove("description");
+        }
+    }
+    v
+}
+
+/// Drop null fields (e.g. no `sourceLibraryKey` on local definitions).
+fn tidy(value: &mut JsonValue) {
+    if let Some(obj) = value.as_object_mut() {
+        obj.retain(|_, v| !v.is_null());
+    }
+}
+
+/// Add `uses` to every variable, collection (sum of its variables) and style, then
+/// drop their null fields.
+fn record_uses(
+    collections: &mut [JsonValue],
+    styles: &mut [JsonValue],
+    uses: &HashMap<String, u64>,
+) {
     let count = |v: &JsonValue| {
         v["id"]
             .as_str()
@@ -592,14 +649,33 @@ pub fn add_design_context(document: &mut JsonValue) -> Result<DesignDefinitions>
         style["uses"] = json!(count(style));
         tidy(style);
     }
+}
+
+/// Annotate the document in place and return the file's variables and styles.
+pub fn add_design_context(document: &mut JsonValue) -> Result<DesignDefinitions> {
+    let index = Index::build(document);
+    let Definitions {
+        mut collections,
+        variables,
+        mut styles,
+    } = Definitions::collect(document, &index);
+    nest_variables(&mut collections, variables);
+
+    // Annotate the design tree, counting how often each variable and style is used
+    let mut annotator = Annotator {
+        index: &index,
+        uses: HashMap::new(),
+    };
+    annotator.annotate(document, true, true);
+    record_uses(&mut collections, &mut styles, &annotator.uses);
 
     // Text styles: make lineHeight / letterSpacing CSS-like, as for nodes.
-    let mut styles_value = JsonValue::Array(std::mem::take(&mut styles));
-    crate::schema::simplify_text_properties(&mut styles_value)?;
+    let mut styles = JsonValue::Array(styles);
+    crate::schema::simplify_text_properties(&mut styles)?;
 
     Ok(DesignDefinitions {
         variables: JsonValue::Array(collections),
-        styles: styles_value,
+        styles,
     })
 }
 

@@ -1,5 +1,9 @@
+use super::walk::for_each_object_mut;
 use crate::error::Result;
-use serde_json::Value as JsonValue;
+use serde_json::{Map, Value as JsonValue};
+
+/// Properties whose `{units, value}` objects are turned into CSS strings.
+const TEXT_PROPERTIES: [&str; 2] = ["letterSpacing", "lineHeight"];
 
 /// Simplifies verbose text property structures to CSS-ready strings.
 ///
@@ -40,95 +44,46 @@ use serde_json::Value as JsonValue;
 /// assert_eq!(tree.get("lineHeight").unwrap().as_str(), Some("20px"));
 /// ```
 pub fn simplify_text_properties(tree: &mut JsonValue) -> Result<()> {
-    transform_recursive(tree)
-}
-
-fn transform_recursive(value: &mut JsonValue) -> Result<()> {
-    match value {
-        JsonValue::Object(map) => {
-            // Collect keys to avoid borrow checker issues
-            let keys: Vec<String> = map.keys().cloned().collect();
-
-            for key in keys {
-                // Check if this is a letterSpacing or lineHeight property
-                if key == "letterSpacing" || key == "lineHeight" {
-                    if let Some(val) = map.get(&key) {
-                        // Check if this value is a units/value object
-                        if let Some(obj) = val.as_object() {
-                            if is_text_property_object(obj) {
-                                // Convert to CSS string
-                                if let Some(css_value) = convert_to_css_string(obj) {
-                                    map.insert(key.clone(), JsonValue::String(css_value));
-                                    continue; // Skip recursion since we replaced the object
-                                }
-                            }
-                        }
-                    }
+    // Replaced values become strings, so the walker has nothing left to visit in them.
+    for_each_object_mut(tree, &mut |map| {
+        for property in TEXT_PROPERTIES {
+            let css_value = match map.get(property) {
+                Some(JsonValue::Object(obj)) if is_text_property_object(obj) => {
+                    convert_to_css_string(obj)
                 }
-
-                // Recurse into the value if it wasn't replaced
-                if let Some(val) = map.get_mut(&key) {
-                    transform_recursive(val)?;
-                }
+                _ => None,
+            };
+            if let Some(css_value) = css_value {
+                map.insert(property.to_string(), JsonValue::String(css_value));
             }
         }
-        JsonValue::Array(arr) => {
-            // Recurse into array elements
-            for val in arr.iter_mut() {
-                transform_recursive(val)?;
-            }
-        }
-        _ => {
-            // Primitives - nothing to do
-        }
-    }
-
+    });
     Ok(())
 }
 
 /// Check if an object is a text property object with units and value
-fn is_text_property_object(obj: &serde_json::Map<String, JsonValue>) -> bool {
+fn is_text_property_object(obj: &Map<String, JsonValue>) -> bool {
     obj.contains_key("units") && obj.contains_key("value")
 }
 
-/// Convert a text property object to CSS string
+/// Convert a text property object to a CSS string.
 ///
-/// Converts Figma's verbose format to CSS-ready strings:
-/// - PERCENT units: append "%" to the value
-/// - PIXELS units: append "px" to the value
-///
-/// # Arguments
-/// * `obj` - Text property object with units and value fields
-///
-/// # Returns
-/// * `Some(String)` - The CSS-ready string (e.g., "-1%" or "20px")
-/// * `None` - If units or value are missing/invalid
-fn convert_to_css_string(obj: &serde_json::Map<String, JsonValue>) -> Option<String> {
-    // Extract units and value
+/// PERCENT values get a `%` suffix and PIXELS values a `px` suffix; whole
+/// numbers are written without a decimal point (e.g. `"-1%"`, `"20px"`).
+/// Returns `None` if `units` or `value` is missing, or `units` is unknown.
+fn convert_to_css_string(obj: &Map<String, JsonValue>) -> Option<String> {
     let units = obj.get("units")?.as_str()?;
     let value = obj.get("value")?.as_f64()?;
 
-    // Convert based on unit type
-    match units {
-        "PERCENT" => {
-            // Format as percentage
-            // Remove unnecessary decimal places if the value is a whole number
-            if value.fract() == 0.0 {
-                Some(format!("{}%", value as i64))
-            } else {
-                Some(format!("{}%", value))
-            }
-        }
-        "PIXELS" => {
-            // Format as pixels
-            // Remove unnecessary decimal places if the value is a whole number
-            if value.fract() == 0.0 {
-                Some(format!("{}px", value as i64))
-            } else {
-                Some(format!("{}px", value))
-            }
-        }
-        _ => None, // Unknown unit type
+    let suffix = match units {
+        "PERCENT" => "%",
+        "PIXELS" => "px",
+        _ => return None,
+    };
+    if value.fract() == 0.0 {
+        Some(format!("{}{}", value as i64, suffix))
+    } else {
+        Some(format!("{}{}", value, suffix))
     }
 }
 

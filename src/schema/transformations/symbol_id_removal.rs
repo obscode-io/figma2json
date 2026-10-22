@@ -1,3 +1,4 @@
+use super::walk::for_each_object_mut;
 use crate::error::Result;
 use serde_json::Value as JsonValue;
 
@@ -30,38 +31,11 @@ use serde_json::Value as JsonValue;
 /// }
 /// ```
 pub fn remove_symbol_id_fields(tree: &mut JsonValue) -> Result<()> {
-    transform_recursive(tree)
-}
-
-fn transform_recursive(value: &mut JsonValue) -> Result<()> {
-    match value {
-        JsonValue::Object(map) => {
-            // Check if this object has a "symbolID" field that should be removed
-            if let Some(symbol_id_value) = map.get("symbolID") {
-                if should_remove_symbol_id(symbol_id_value) {
-                    map.remove("symbolID");
-                }
-            }
-
-            // Recurse into all remaining values
-            let keys: Vec<String> = map.keys().cloned().collect();
-            for key in keys {
-                if let Some(val) = map.get_mut(&key) {
-                    transform_recursive(val)?;
-                }
-            }
+    for_each_object_mut(tree, &mut |map| {
+        if map.get("symbolID").is_some_and(should_remove_symbol_id) {
+            map.remove("symbolID");
         }
-        JsonValue::Array(arr) => {
-            // Recurse into array elements
-            for val in arr.iter_mut() {
-                transform_recursive(val)?;
-            }
-        }
-        _ => {
-            // Primitives - nothing to do
-        }
-    }
-
+    });
     Ok(())
 }
 
@@ -70,20 +44,8 @@ fn transform_recursive(value: &mut JsonValue) -> Result<()> {
 /// Returns true if the value is an object containing only the fields
 /// "localID" and/or "sessionID" with no other fields.
 fn should_remove_symbol_id(value: &JsonValue) -> bool {
-    if let JsonValue::Object(map) = value {
-        // Check if all keys are in the allowed set
-        for key in map.keys() {
-            if key != "localID" && key != "sessionID" {
-                // Found a field that's not localID or sessionID
-                return false;
-            }
-        }
-        // All keys are either localID or sessionID (or empty)
-        true
-    } else {
-        // Not an object, don't remove
-        false
-    }
+    matches!(value, JsonValue::Object(map)
+        if map.keys().all(|key| key == "localID" || key == "sessionID"))
 }
 
 #[cfg(test)]

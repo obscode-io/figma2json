@@ -1,5 +1,25 @@
+use super::walk::for_each_object_mut;
 use crate::error::Result;
 use serde_json::Value as JsonValue;
+
+/// Fields removed from every object in the tree.
+const REMOVED_FIELDS: [&str; 15] = [
+    "textBidiVersion",
+    "textExplicitLayoutVersion",
+    "textUserLayoutVersion",
+    "textDecorationSkipInk",
+    "fontVariantCommonLigatures",
+    "fontVariantContextualLigatures",
+    "fontVariantNumericFigure",
+    "fontVariantNumericSpacing",
+    "fontVariations",
+    "fontVersion",
+    "emojiImageSet",
+    "autoRename",
+    "textTracking",
+    "textAlignVertical",
+    "textAutoResize",
+];
 
 /// Remove text metadata fields from all objects in the JSON tree
 ///
@@ -45,49 +65,11 @@ use serde_json::Value as JsonValue;
 /// // tree now has only "name" and "fontSize" fields
 /// ```
 pub fn remove_text_metadata_fields(tree: &mut JsonValue) -> Result<()> {
-    transform_recursive(tree)
-}
-
-/// Recursively remove text metadata fields from a JSON value
-fn transform_recursive(value: &mut JsonValue) -> Result<()> {
-    match value {
-        JsonValue::Object(map) => {
-            // Remove all text metadata fields if they exist
-            map.remove("textBidiVersion");
-            map.remove("textExplicitLayoutVersion");
-            map.remove("textUserLayoutVersion");
-            map.remove("textDecorationSkipInk");
-            map.remove("fontVariantCommonLigatures");
-            map.remove("fontVariantContextualLigatures");
-            map.remove("fontVariantNumericFigure");
-            map.remove("fontVariantNumericSpacing");
-            map.remove("fontVariations");
-            map.remove("fontVersion");
-            map.remove("emojiImageSet");
-            map.remove("autoRename");
-            map.remove("textTracking");
-            map.remove("textAlignVertical");
-            map.remove("textAutoResize");
-
-            // Recurse into all remaining values
-            let keys: Vec<String> = map.keys().cloned().collect();
-            for key in keys {
-                if let Some(val) = map.get_mut(&key) {
-                    transform_recursive(val)?;
-                }
-            }
+    for_each_object_mut(tree, &mut |map| {
+        for field in REMOVED_FIELDS {
+            map.remove(field);
         }
-        JsonValue::Array(arr) => {
-            // Recurse into array elements
-            for val in arr.iter_mut() {
-                transform_recursive(val)?;
-            }
-        }
-        _ => {
-            // Primitives - nothing to do
-        }
-    }
-
+    });
     Ok(())
 }
 

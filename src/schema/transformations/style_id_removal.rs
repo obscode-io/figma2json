@@ -1,5 +1,15 @@
+use super::walk::for_each_object_mut;
 use crate::error::Result;
 use serde_json::Value as JsonValue;
+
+/// Fields removed from every object in the tree.
+const REMOVED_FIELDS: [&str; 5] = [
+    "styleIdForFill",
+    "styleIdForText",
+    "styleIdForStrokeFill",
+    "styleIdForEffect",
+    "styleIdForGrid",
+];
 
 /// Remove style ID reference fields from all objects in the JSON tree
 ///
@@ -40,39 +50,11 @@ use serde_json::Value as JsonValue;
 /// // tree now has "name", "fillPaints", and "fontSize" fields
 /// ```
 pub fn remove_style_ids(tree: &mut JsonValue) -> Result<()> {
-    transform_recursive(tree)
-}
-
-/// Recursively remove style ID fields from a JSON value
-fn transform_recursive(value: &mut JsonValue) -> Result<()> {
-    match value {
-        JsonValue::Object(map) => {
-            // Remove all style ID fields if they exist
-            map.remove("styleIdForFill");
-            map.remove("styleIdForText");
-            map.remove("styleIdForStrokeFill");
-            map.remove("styleIdForEffect");
-            map.remove("styleIdForGrid");
-
-            // Recurse into all remaining values
-            let keys: Vec<String> = map.keys().cloned().collect();
-            for key in keys {
-                if let Some(val) = map.get_mut(&key) {
-                    transform_recursive(val)?;
-                }
-            }
+    for_each_object_mut(tree, &mut |map| {
+        for field in REMOVED_FIELDS {
+            map.remove(field);
         }
-        JsonValue::Array(arr) => {
-            // Recurse into array elements
-            for val in arr.iter_mut() {
-                transform_recursive(val)?;
-            }
-        }
-        _ => {
-            // Primitives - nothing to do
-        }
-    }
-
+    });
     Ok(())
 }
 

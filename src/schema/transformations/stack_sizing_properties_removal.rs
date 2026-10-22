@@ -1,5 +1,9 @@
+use super::walk::for_each_object_mut;
 use crate::error::Result;
 use serde_json::Value as JsonValue;
+
+/// Fields removed from every object in the tree.
+const REMOVED_FIELDS: [&str; 2] = ["stackCounterSizing", "stackPrimarySizing"];
 
 /// Removes Figma-specific stack sizing properties from the document tree.
 ///
@@ -36,35 +40,11 @@ use serde_json::Value as JsonValue;
 /// assert!(tree.get("size").is_some());
 /// ```
 pub fn remove_stack_sizing_properties(tree: &mut JsonValue) -> Result<()> {
-    transform_recursive(tree)
-}
-
-fn transform_recursive(value: &mut JsonValue) -> Result<()> {
-    match value {
-        JsonValue::Object(map) => {
-            // Remove stack sizing properties
-            map.remove("stackCounterSizing");
-            map.remove("stackPrimarySizing");
-
-            // Recurse into all remaining values
-            let keys: Vec<String> = map.keys().cloned().collect();
-            for key in keys {
-                if let Some(val) = map.get_mut(&key) {
-                    transform_recursive(val)?;
-                }
-            }
+    for_each_object_mut(tree, &mut |map| {
+        for field in REMOVED_FIELDS {
+            map.remove(field);
         }
-        JsonValue::Array(arr) => {
-            // Recurse into array elements
-            for val in arr.iter_mut() {
-                transform_recursive(val)?;
-            }
-        }
-        _ => {
-            // Primitives - nothing to do
-        }
-    }
-
+    });
     Ok(())
 }
 
