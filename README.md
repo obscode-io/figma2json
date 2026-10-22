@@ -7,6 +7,9 @@ build the UI: edit history, glyph outlines, plugin data, default values. What's 
 the information needed to write HTML/CSS: node ids, layout, auto-layout settings, colors, text styles, and
 the names of the variables (design tokens), styles and components each layer uses.
 
+Use it from the command line, as a Rust library, or in the browser with the [web app](#web-app)
+(<https://obsidian-code-io.github.io/figma2json/>), where the conversion runs locally in WebAssembly.
+
 ## Quick start
 
 1. In Figma, open the file and choose **File → Save local copy…**
@@ -33,6 +36,31 @@ cargo install --path .
 ```
 
 To build without installing, run `cargo build --release`; the binary is `target/release/figma2json`.
+
+## Web app
+
+The same converter, compiled to WebAssembly, runs in the browser:
+**<https://obsidian-code-io.github.io/figma2json/>**. Your file never leaves your browser: the page is static,
+and the conversion runs in a Web Worker on your machine.
+
+Drop a `.fig` (or pick one), choose the options (they match the CLI flags below), then preview or copy the
+JSON, download `canvas.json`, or download a ZIP with `canvas.json` and the `images/` it references. For the
+same file and options, `canvas.json` matches what the CLI writes, except that every reference to an image used
+more than once carries its file extension (the CLI adds it to the first reference only). Very large files are
+limited by the browser's 4 GB WebAssembly memory; use the CLI for those.
+
+To build and serve it locally you need the `wasm32-unknown-unknown` target and `wasm-bindgen-cli` 0.2.100:
+
+```bash
+rustup target add wasm32-unknown-unknown
+cargo install wasm-bindgen-cli --version 0.2.100 --locked
+web/build.sh                          # writes web/www/pkg/
+python3 -m http.server -d web/www 8000
+# open http://localhost:8000
+```
+
+See [web/README.md](web/README.md) for details. The site is deployed to GitHub Pages from `main` by
+`.github/workflows/pages.yml`.
 
 ## Usage
 
@@ -143,14 +171,24 @@ let json = convert_with_options(&bytes, Some(Path::new("out")), &ConvertOptions:
 println!("{}", serde_json::to_string_pretty(&json)?);
 ```
 
-`convert_raw` returns the decoded file without transformations. The individual passes are public in
+`convert_raw` returns the decoded file without transformations. `convert_in_memory` converts without touching
+the filesystem: it reads a ZIP container in memory and returns the JSON plus the archive's files, with images
+renamed to their detected extension (this is what the web app uses). The individual passes are public in
 `figma2json::schema`.
+
+To use the library without the CLI's dependencies, turn off the default `cli` feature:
+
+```toml
+figma2json = { git = "https://github.com/obsidian-code-io/figma2json", default-features = false }
+```
+
+The library has no C dependencies and builds for `wasm32-unknown-unknown`.
 
 ## How it works
 
 1. **Container.** A `.fig` is a ZIP holding `canvas.fig`, images and metadata. `canvas.fig` starts with a
    `fig-kiwi` (or `fig-jam.`) header followed by length-prefixed chunks.
-2. **Decompression.** Each chunk is raw DEFLATE or Zstandard.
+2. **Decompression.** Each chunk is raw DEFLATE or Zstandard (decoded in pure Rust with `ruzstd`).
 3. **Decoding.** The first chunk is a Kiwi schema; the second is the
    document, decoded with that schema straight into JSON.
 4. **Tree.** The flat list of node changes is assembled into a tree using each node's parent index.
@@ -173,6 +211,10 @@ src/
 ├── parser/              ZIP, header, chunks, decompression
 ├── schema/              Kiwi decoder, tree builder, transformations/
 └── blobs/               blob parsing and substitution
+web/                     figma2json-web: WebAssembly bindings (workspace member)
+├── src/lib.rs           wasm-bindgen API: convert(), Conversion, Options
+├── build.sh             builds the module into www/pkg/
+└── www/                 static site: index.html, app.js, worker.js, style.css
 tools/                   Python helpers that split canvas.json into per-screen files
 ```
 
@@ -180,13 +222,14 @@ tools/                   Python helpers that split canvas.json into per-screen f
 
 ```bash
 cargo fmt --all --check
-cargo clippy --all-targets --all-features --locked -- -D warnings
-cargo test --locked
-RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --locked
+cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+cargo test --workspace --locked
+RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --locked
+web/build.sh
 ```
 
 CI runs the same checks on every push and pull request, plus the test suite on the minimum supported Rust
-version (1.88).
+version (1.88) and a WebAssembly build of the web crate.
 
 ## License
 
