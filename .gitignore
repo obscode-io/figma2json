@@ -31,3 +31,4 @@ CLAUDE.md
 big
 TODO.md
 __pycache__/
+.claude/worktrees/
