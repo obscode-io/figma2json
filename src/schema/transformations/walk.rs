@@ -26,30 +26,6 @@ where
     }
 }
 
-/// Call `f` on every JSON object in `value`, depth-first, children first.
-///
-/// Each object is visited after the values it contains, which lets `f`
-/// see the already-transformed children (e.g. to drop objects left empty).
-pub(crate) fn for_each_object_mut_post<F>(value: &mut JsonValue, f: &mut F)
-where
-    F: FnMut(&mut Map<String, JsonValue>),
-{
-    match value {
-        JsonValue::Object(map) => {
-            for child in map.values_mut() {
-                for_each_object_mut_post(child, f);
-            }
-            f(map);
-        }
-        JsonValue::Array(items) => {
-            for item in items {
-                for_each_object_mut_post(item, f);
-            }
-        }
-        _ => {}
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -72,18 +48,5 @@ mod tests {
             count += 1;
         });
         assert_eq!(count, 2);
-    }
-
-    #[test]
-    fn post_order_sees_children_first() {
-        let mut tree = json!({"child": {"x": 1}});
-        let mut order = Vec::new();
-        for_each_object_mut_post(&mut tree, &mut |map| order.push(map.len()));
-        assert_eq!(order, vec![1, 1]);
-        let mut tree = json!({"child": {"empty": {}}});
-        for_each_object_mut_post(&mut tree, &mut |map| {
-            map.retain(|_, v| !matches!(v, JsonValue::Object(m) if m.is_empty()))
-        });
-        assert_eq!(tree, json!({}));
     }
 }
